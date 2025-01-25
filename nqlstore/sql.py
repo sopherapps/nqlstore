@@ -1,12 +1,15 @@
 """SQL implementation"""
 
-from typing import Iterable, TypeVar
+from typing import Any, Iterable, TypeVar
 
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.sql._typing import _ColumnExpressionArgument
+from sqlalchemy.sql._typing import (
+    _ColumnExpressionArgument,
+    _ColumnExpressionOrStrLabelArgument,
+)
 from sqlmodel import *
-from sqlmodel.sql._expression_select_cls import Select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel.sql._expression_select_cls import Select
 
 from ._base import BaseStore
 
@@ -41,13 +44,14 @@ class SQLStore(BaseStore):
         *filters: _Filter,
         skip: int = 0,
         limit: int | None = None,
+        sort: tuple[_ColumnExpressionOrStrLabelArgument[Any]] = (),
         **kwargs,
     ) -> Iterable[_T]:
         async with AsyncSession(self._engine) as session:
-            statement: Select = (  # noqa
-                select(model).where(*filters).limit(limit).offset(skip)
-            )
-            results = await session.exec(statement)
+            stmt: Select = (
+                select(model).where(*filters).limit(limit).offset(skip).order_by(*sort)
+            )  # noqa
+            results = await session.exec(stmt)
         return results
 
     async def update(

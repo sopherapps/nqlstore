@@ -1,6 +1,6 @@
 """MongoDB implementation"""
 
-from typing import Any, Iterable, TypeVar, Mapping
+from typing import Any, Iterable, Mapping, TypeVar
 
 from beanie import *
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorClientSession

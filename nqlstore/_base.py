@@ -50,6 +50,7 @@ class BaseStore(abc.ABC):
         *filters: Any,
         skip: int = 0,
         limit: int | None = None,
+        sort: Any = None,
         **kwargs,
     ) -> Iterable[_T]:
         """Find the items that fulfill the given filters
@@ -59,6 +60,7 @@ class BaseStore(abc.ABC):
             model: the model whose instances are being queried
             skip: number of records to ignore at the top of the returned results; default is 0
             limit: maximum number of records to return; default is None.
+            sort: fields to sort by; default = None
             kwargs: extra key-word args to pass to the underlying find method
 
         Returns:

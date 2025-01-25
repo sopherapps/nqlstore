@@ -155,7 +155,7 @@ from nqlstore.mongo import MongoStore
 from .models import Book, Library
 
 if __name__ == "__main__":
-    store = MongoStore(uri="mongodb://localhost:27017")
+    store = MongoStore(uri="mongodb://localhost:27017", database="testing")
     store.register([
         Library,
         Book,
