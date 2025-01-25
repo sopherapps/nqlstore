@@ -163,20 +163,110 @@ if __name__ == "__main__":
 ### Use your models in your application
 
 In the rest of you application use the four class methods available on the models.
-Querying styles native to the different database technologies are supported out of the box.
+Filtering styles native to the different database technologies are supported out of the box.
 
-For instance:
+- SQL filtering is the same as that of [SQLModel way of querying/filtering](https://sqlmodel.tiangolo.com/tutorial/where/#where-and-expressions-instead-of-keyword-arguments)
+- Redis filtering is the same as that of [RedisOM](https://redis.io/docs/latest/integrate/redisom-for-python/#create-read-update-and-delete-data)
+- MongoDb filtering is the same as that of [MongoDB](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
 
-#### SQL
+#### Create
 
-models based on SQL will follow the [SQLModel way of querying/filtering](https://sqlmodel.tiangolo.com/tutorial/where/#where-and-expressions-instead-of-keyword-arguments)
+Creating new items in a store, call `store.create(Type[Model], List[dict])` method.
 
-TODO: Complete design
 ```python
-# app.py
-
-from .models import Library, Book
-
-def do_something():
-    new_library = Library.create()
+new_library = await store.create(Library, [{}, {}])
 ```
+
+#### Read
+
+Reading items in a store, call `store.read(Type[Model], *filters: Any, skip: int=0, limit: int | None=None)` method.
+
+The key-word arguments include:
+
+- `skip (int)` - number of records to ignore at the top of the returned results; default is 0.
+- `limit (int | None)` - maximum number of records to return; default is None.
+
+The filters on the other hand are different for each type of database technology as alluded to [above](#use-your-models-in-your-application)   
+
+##### SQL filtering is SQLModel-style
+
+```python
+libraries = await store.read(Library, Library.name == "Hairora", Library.address != "Buhimba")
+```
+
+##### Redis filtering is RedisOM-style
+
+```python
+libraries = await store.read(Library, (Library.name == "Hairora") & (Library.address != "Buhimba"))
+```
+
+##### Mongo filtering is MongoDB-style
+
+```python
+libraries = await store.read(Library, 
+                             {"name": "Hairora", "address": {"$ne": "Buhimba"}})
+```
+
+#### Update
+
+Updating items in a store, call `store.update(cls: Type[Model], *filters: Any, updates: dict)` method.
+
+The method returns the newly updated records.  
+The `filters` follow the same style as that used when reading as shown [above](#read).  
+Similarly, `updates` are different for each type of database technology as alluded to [earlier](#use-your-models-in-your-application).
+
+##### SQL updates are just dictionaries of the new field values
+
+```python
+libraries = await store.update(
+  Library, 
+  Library.name == "Hairora", Library.address != "Buhimba", 
+  updates={"name": "Foo"},
+)
+```
+
+##### Redis updates are just dictionaries of the new field values
+
+```python
+libraries = await store.update(
+  Library, 
+  (Library.name == "Hairora") & (Library.address != "Buhimba"), 
+  updates={"name": "Foo"},
+)
+```
+
+##### Mongo updates are [MongoDB-style update dicts](https://www.mongodb.com/docs/manual/reference/operator/update/)
+
+```python
+libraries = await store.update(
+  Library, 
+  {"name": "Hairora", "address": {"$ne": "Buhimba"}}, 
+  updates={"$set": {"name": "Foo"}},
+)
+```
+
+#### Delete
+
+Deleting items in a store, call `store.delete(cls: Type[Model], *filters: Any)` method.
+
+The `filters` follow the same style as that used when reading as shown [above](#read).  
+
+##### SQL filtering is SQLModel-style
+
+```python
+libraries = await store.delete(Library, Library.name == "Hairora", Library.address != "Buhimba")
+```
+
+##### Redis filtering is RedisOM-style
+
+```python
+libraries = await store.delete(Library, (Library.name == "Hairora") & (Library.address != "Buhimba"))
+```
+
+##### Mongo filtering is MongoDB-style
+
+```python
+libraries = await store.delete(Library, 
+                             {"name": "Hairora", "address": {"$ne": "Buhimba"}})
+```
+
