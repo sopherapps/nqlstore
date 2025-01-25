@@ -1,5 +1,7 @@
 # NQLStore
 
+[![PyPI version](https://badge.fury.io/py/nqlstore.svg)](https://badge.fury.io/py/nqlstore) ![CI](https://github.com/sopherapps/nqlstore/actions/workflows/ci.yml/badge.svg)
+
 NQLStore, a simple CRUD store python library for `any query launguage` (or in short `nql`)
 
 ---
