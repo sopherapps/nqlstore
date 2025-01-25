@@ -270,3 +270,18 @@ libraries = await store.delete(Library,
                              {"name": "Hairora", "address": {"$ne": "Buhimba"}})
 ```
 
+## License
+
+Copyright (c) 2025 [Martin Ahindura](https://github.com/Tinitto)   
+Licensed under the [MIT License](./LICENSE)
+
+## Gratitude
+
+> "In that day you will ask in My name. I am not saying that I will ask the Father on your behalf.
+> No, the Father himself loves you because you have loved Me and have believed that I came from God."
+>
+> -- John 16: 26-27
+
+All glory be to God
+
+<a href="https://www.buymeacoffee.com/martinahinJ" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
