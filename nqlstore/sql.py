@@ -1,6 +1,6 @@
 """SQL implementation"""
 
-from typing import Any, Iterable, TypeVar
+from typing import Any, AsyncIterable, Iterable, TypeVar
 
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.sql._typing import (
@@ -33,10 +33,12 @@ class SQLStore(BaseStore):
 
     async def insert(
         self, model: type[_T], items: Iterable[_T | dict], **kwargs
-    ) -> Iterable[_T]:
+    ) -> AsyncIterable[_T]:
         parsed_items = [v if isinstance(v, model) else model(**v) for v in items]
         async with AsyncSession(self._engine) as session:
-            return await session.scalars(insert(model).returning(model), parsed_items)
+            return await session.stream_scalars(
+                insert(model).returning(model), parsed_items
+            )
 
     async def find(
         self,
@@ -46,24 +48,24 @@ class SQLStore(BaseStore):
         limit: int | None = None,
         sort: tuple[_ColumnExpressionOrStrLabelArgument[Any]] = (),
         **kwargs,
-    ) -> Iterable[_T]:
+    ) -> AsyncIterable[_T]:
         async with AsyncSession(self._engine) as session:
-            stmt: Select = (
+            return await session.stream_scalars(
                 select(model).where(*filters).limit(limit).offset(skip).order_by(*sort)
-            )  # noqa
-            results = await session.exec(stmt)
-        return results
+            )
 
     async def update(
         self, model: type[_T], *filters: _Filter, updates: dict, **kwargs
-    ) -> Iterable[_T]:
+    ) -> AsyncIterable[_T]:
         async with AsyncSession(self._engine) as session:
-            return await session.scalars(
+            return await session.stream_scalars(
                 update(model).where(*filters).values(**updates).returning(model)
             )
 
     async def delete(
         self, model: type[_T], *filters: _Filter, **kwargs
-    ) -> Iterable[_T]:
+    ) -> AsyncIterable[_T]:
         async with AsyncSession(self._engine) as session:
-            return await session.scalars(delete(model).where(*filters).returning(model))
+            return await session.stream_scalars(
+                delete(model).where(*filters).returning(model)
+            )

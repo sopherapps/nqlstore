@@ -1,6 +1,6 @@
 """Redis implementation"""
 
-from typing import Any, Callable, Iterable, TypeVar
+from typing import Any, AsyncIterable, Callable, Iterable, TypeVar
 
 from aredis_om import *
 from aredis_om.model.model import Expression, verify_pipeline_response
@@ -30,11 +30,14 @@ class RedisStore(BaseStore):
         pipeline: Pipeline | None = None,
         pipeline_verifier: Callable[..., Any] = verify_pipeline_response,
         **kwargs,
-    ) -> Iterable[_T]:
+    ) -> AsyncIterable[_T]:
         parsed_items = [v if isinstance(v, model) else model(**v) for v in items]
-        return await model.add(
+        results = await model.add(
             parsed_items, pipeline=pipeline, pipeline_verifier=pipeline_verifier
         )
+
+        for result in results:
+            yield result
 
     async def find(
         self,
@@ -45,10 +48,11 @@ class RedisStore(BaseStore):
         sort: tuple[str] | None = None,
         knn: KNNExpression | None = None,
         **kwargs,
-    ) -> Iterable[_T]:
+    ) -> AsyncIterable[_T]:
         query = model.find(*filters, knn=knn)
-        query = query.copy(offset=skip, sort_fields=sort, limit=limit, **kwargs)
-        return await query.all()
+        return await query.copy(
+            offset=skip, sort_fields=sort, limit=limit, **kwargs
+        ).all()
 
     async def update(
         self,
@@ -57,10 +61,9 @@ class RedisStore(BaseStore):
         updates: dict,
         knn: KNNExpression | None = None,
         **kwargs,
-    ) -> Iterable[_T]:
+    ) -> AsyncIterable[_T]:
         query = model.find(*filters, knn=knn)
-        query = query.copy(**kwargs)
-        matched_items = await query.all()
+        matched_items = await query.copy(**kwargs).all()
         updated_pks = []
         for item in matched_items:
             await item.update(**updates)
@@ -75,10 +78,9 @@ class RedisStore(BaseStore):
         knn: KNNExpression | None = None,
         pipeline: Pipeline | None = None,
         **kwargs,
-    ) -> Iterable[_T]:
+    ) -> AsyncIterable[_T]:
         query = model.find(*filters, knn=knn)
-        query = query.copy(**kwargs)
-        matched_items = await query.all()
+        matched_items = await query.copy(**kwargs).all()
         await model.delete_many(matched_items, pipeline=pipeline)
 
         return matched_items
