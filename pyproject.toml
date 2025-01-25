@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nqlstore"
+authors = [
+    {name = "Martin Ahindura", email = "sales@sopherapps.com"},
+]
+version = "0.0.1"
+description = "NQLStore, a simple CRUD store python library for `any query launguage` (or in short `nql`)."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["database", "model", "orm"]
+license = {file = "LICENSE"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "pydantic~=2.10.6",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest~=8.3.4",
+    "pytest-asyncio~=0.25.2",
+    "isort~=5.13.2",
+    "black~=24.10.0",
+]
+sql = ["sqlmodel~=0.0.22"]
+mongo = ["motor~=3.6.1"]
+redis = ["redis-om~=0.3.3"]
+
+[tool.setuptools]
+packages = ["nqlstore"]

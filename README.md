@@ -27,7 +27,7 @@ support your favourite database technology.
 
 ## Dependencies
 
-- [Python +3.11](https://www.python.org/downloads/)
+- [Python +3.10](https://www.python.org/downloads/)
 - [Pydantic +2.0](https://docs.pydantic.dev/latest/)
 - [SQLModel _(_optional_)](https://sqlmodel.tiangolo.com/) - only required for relational databases
 - [RedisOM (_optional_)](https://redis.io/docs/latest/integrate/redisom-for-python/) - only required for [redis]()
@@ -37,7 +37,7 @@ support your favourite database technology.
 
 ### Install NQLStore from Pypi 
 
-Install NQLStore from pypi, with any of the options: `all`, `sql`, `mongo`, `redis`.
+Install NQLStore from pypi, with any of the options: `sql`, `mongo`, `redis`.
 
 ```shell
 pip install nqlstore
