@@ -15,15 +15,17 @@ class BaseStore(abc.ABC):
         """
         Args:
             uri: the URI to the underlying store
+            kwargs: extra key-word args to pass to the initializer
         """
         self._uri = uri
 
     @abc.abstractmethod
-    async def register(self, models: Iterable[type[_T]]):
+    async def register(self, models: list[type[_T]], **kwargs):
         """Registers the given models and runs any initialization steps
 
         Args:
             models: the list of Model's this store is to contain
+            kwargs: extra key-word args to pass to the initializer
         """
 
     @abc.abstractmethod
@@ -43,7 +45,12 @@ class BaseStore(abc.ABC):
 
     @abc.abstractmethod
     async def find(
-        self, model: type[_T], *filters: Any, skip: int = 0, limit: int | None = None
+        self,
+        model: type[_T],
+        *filters: Any,
+        skip: int = 0,
+        limit: int | None = None,
+        **kwargs,
     ) -> Iterable[_T]:
         """Find the items that fulfill the given filters
 
@@ -52,31 +59,36 @@ class BaseStore(abc.ABC):
             model: the model whose instances are being queried
             skip: number of records to ignore at the top of the returned results; default is 0
             limit: maximum number of records to return; default is None.
+            kwargs: extra key-word args to pass to the underlying find method
 
         Returns:
             the matched items
         """
 
     @abc.abstractmethod
-    async def update(self, model: type[_T], *filters: Any, updates: dict) -> Iterable[_T]:
+    async def update(
+        self, model: type[_T], *filters: Any, updates: dict, **kwargs
+    ) -> Iterable[_T]:
         """Update the items that fulfill the given filters
 
         Args:
             filters: the things to match against
             updates: the payload to update the items with
             model: the model whose instances are being updated
+            kwargs: extra key-word args to pass to the underlying update method
 
         Returns:
             the items after updating
         """
 
     @abc.abstractmethod
-    async def delete(self, model: type[_T], *filters: Any) -> Iterable[_T]:
+    async def delete(self, model: type[_T], *filters: Any, **kwargs) -> Iterable[_T]:
         """Delete the items that fulfill the given filters
 
         Args:
             filters: the things to match against
             model: the model whose instances are being deleted
+            kwargs: extra key-word args to pass to the underlying delete method
 
         Returns:
             the deleted items

@@ -32,8 +32,8 @@ support your favourite database technology.
 - [Python +3.10](https://www.python.org/downloads/)
 - [Pydantic +2.0](https://docs.pydantic.dev/latest/)
 - [SQLModel _(_optional_)](https://sqlmodel.tiangolo.com/) - only required for relational databases
-- [RedisOM (_optional_)](https://redis.io/docs/latest/integrate/redisom-for-python/) - only required for [redis]()
-- [Motor (_optional_)](https://www.mongodb.com/docs/drivers/motor/) - only required for [MongoDB]()
+- [RedisOM (_optional_)](https://redis.io/docs/latest/integrate/redisom-for-python/) - only required for [redis](https://redis.io/)
+- [Beanie (_optional_)](https://beanie-odm.dev/) - only required for [MongoDB](https://www.mongodb.com/)
 
 ## Quick Start
 
@@ -52,7 +52,7 @@ In your python modules, define your data models as you would define them with yo
 
 Here are examples of OM packages to substitute.
 
-#### SQL
+#### SQL (use [SQLModel](https://sqlmodel.tiangolo.com/) models)
 
 ```python
 # models.py
@@ -70,7 +70,7 @@ class Book(SQLModel, table=True):
     library_id: int = Field(default=None, foreign_key="library.id")
 ```
 
-#### Redis
+#### Redis (use [RedisOM](https://redis.io/docs/latest/integrate/redisom-for-python/) models)
 
 ```python
 # models.py
@@ -87,20 +87,20 @@ class Library(JsonModel):
     books: List[Book]
 ```
 
-#### Mongo
+#### Mongo (use [Beanie](https://beanie-odm.dev/))
 
 ```python
 # models.py
 
-from nqlstore.mongo import MongoModel 
+from nqlstore.mongo import Document, Indexed
     
-class Library(MongoModel):
-    id: str
+class Library(Document):
     address: str
     name: str 
 
-class Book(MongoModel):
-    title: str 
+
+class Book(Document):
+    title: Indexed(str) 
     library_id: str
 ```
 
