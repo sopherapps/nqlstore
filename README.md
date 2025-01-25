@@ -124,7 +124,7 @@ from .models import Book, Library
 
 if __name__ == "__main__":
     store = SQLStore(uri="sqlite:///database.db")
-    store.init([
+    store.register([
         Library,
         Book,
     ])
@@ -140,7 +140,7 @@ from .models import Book, Library
 
 if __name__ == "__main__":
     store = RedisStore(uri="rediss://username:password@localhost:6379/0")
-    store.init([
+    store.register([
         Library,
         Book,
     ])
@@ -156,7 +156,7 @@ from .models import Book, Library
 
 if __name__ == "__main__":
     store = MongoStore(uri="mongodb://localhost:27017")
-    store.init([
+    store.register([
         Library,
         Book,
     ])
@@ -171,17 +171,17 @@ Filtering styles native to the different database technologies are supported out
 - Redis filtering is the same as that of [RedisOM](https://redis.io/docs/latest/integrate/redisom-for-python/#create-read-update-and-delete-data)
 - MongoDb filtering is the same as that of [MongoDB](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
 
-#### Create
+#### Insert
 
-Creating new items in a store, call `store.create(Type[Model], List[dict])` method.
+Inserting new items in a store, call `store.insert(Type[Model], List[dict])` method.
 
 ```python
-new_library = await store.create(Library, [{}, {}])
+new_library = await store.insert(Library, [{}, {}])
 ```
 
-#### Read
+#### Find
 
-Reading items in a store, call `store.read(Type[Model], *filters: Any, skip: int=0, limit: int | None=None)` method.
+Finding items in a store, call `store.find(Type[Model], *filters: Any, skip: int=0, limit: int | None=None)` method.
 
 The key-word arguments include:
 
@@ -193,28 +193,28 @@ The filters on the other hand are different for each type of database technology
 ##### SQL filtering is SQLModel-style
 
 ```python
-libraries = await store.read(Library, Library.name == "Hairora", Library.address != "Buhimba")
+libraries = await store.find(Library, Library.name == "Hairora", Library.address != "Buhimba")
 ```
 
 ##### Redis filtering is RedisOM-style
 
 ```python
-libraries = await store.read(Library, (Library.name == "Hairora") & (Library.address != "Buhimba"))
+libraries = await store.find(Library, (Library.name == "Hairora") & (Library.address != "Buhimba"))
 ```
 
 ##### Mongo filtering is MongoDB-style
 
 ```python
-libraries = await store.read(Library, 
+libraries = await store.find(Library, 
                              {"name": "Hairora", "address": {"$ne": "Buhimba"}})
 ```
 
 #### Update
 
-Updating items in a store, call `store.update(cls: Type[Model], *filters: Any, updates: dict)` method.
+Updating items in a store, call `store.update(model: Type[Model], *filters: Any, updates: dict)` method.
 
 The method returns the newly updated records.  
-The `filters` follow the same style as that used when reading as shown [above](#read).  
+The `filters` follow the same style as that used when querying as shown [above](#read).  
 Similarly, `updates` are different for each type of database technology as alluded to [earlier](#use-your-models-in-your-application).
 
 ##### SQL updates are just dictionaries of the new field values
@@ -249,7 +249,7 @@ libraries = await store.update(
 
 #### Delete
 
-Deleting items in a store, call `store.delete(cls: Type[Model], *filters: Any)` method.
+Deleting items in a store, call `store.delete(model: Type[Model], *filters: Any)` method.
 
 The `filters` follow the same style as that used when reading as shown [above](#read).  
 
