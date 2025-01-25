@@ -21,18 +21,18 @@ class SQLStore(BaseStore):
         super().__init__(uri, **kwargs)
         self._engine = create_engine(uri, **kwargs)
 
-    def register(self, models: Iterable[type[_T]]):
+    async def register(self, models: Iterable[type[_T]]):
         tables = [v.__table__ for v in models]
         SQLModel.metadata.create_all(self._engine, tables=tables)
 
-    def insert(
+    async def insert(
         self, model: type[_T], items: Iterable[_T | dict], **kwargs
     ) -> Iterable[_T]:
         parsed_items = [v if isinstance(v, model) else model(**v) for v in items]
         with Session(self._engine) as session:
             return session.scalars(insert(model).returning(model), parsed_items)
 
-    def find(
+    async def find(
         self,
         model: type[_T],
         *filters: _Filter,
@@ -46,12 +46,12 @@ class SQLStore(BaseStore):
             results = session.exec(statement)
         return results
 
-    def update(self, model: type[_T], *filters: _Filter, updates: dict) -> Iterable[_T]:
+    async def update(self, model: type[_T], *filters: _Filter, updates: dict) -> Iterable[_T]:
         with Session(self._engine) as session:
             return session.scalars(
                 update(model).where(*filters).values(**updates).returning(model)
             )
 
-    def delete(self, model: type[_T], *filters: _Filter) -> Iterable[_T]:
+    async def delete(self, model: type[_T], *filters: _Filter) -> Iterable[_T]:
         with Session(self._engine) as session:
             return session.scalars(delete(model).where(*filters).returning(model))

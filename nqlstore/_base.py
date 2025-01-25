@@ -19,7 +19,7 @@ class BaseStore(abc.ABC):
         self._uri = uri
 
     @abc.abstractmethod
-    def register(self, models: Iterable[type[_T]]):
+    async def register(self, models: Iterable[type[_T]]):
         """Registers the given models and runs any initialization steps
 
         Args:
@@ -27,7 +27,7 @@ class BaseStore(abc.ABC):
         """
 
     @abc.abstractmethod
-    def insert(
+    async def insert(
         self, model: type[_T], items: Iterable[_T | dict], **kwargs
     ) -> Iterable[_T]:
         """Inserts the items to the store
@@ -42,7 +42,7 @@ class BaseStore(abc.ABC):
         """
 
     @abc.abstractmethod
-    def find(
+    async def find(
         self, model: type[_T], *filters: Any, skip: int = 0, limit: int | None = None
     ) -> Iterable[_T]:
         """Find the items that fulfill the given filters
@@ -58,7 +58,7 @@ class BaseStore(abc.ABC):
         """
 
     @abc.abstractmethod
-    def update(self, model: type[_T], *filters: Any, updates: dict) -> Iterable[_T]:
+    async def update(self, model: type[_T], *filters: Any, updates: dict) -> Iterable[_T]:
         """Update the items that fulfill the given filters
 
         Args:
@@ -71,7 +71,7 @@ class BaseStore(abc.ABC):
         """
 
     @abc.abstractmethod
-    def delete(self, model: type[_T], *filters: Any) -> Iterable[_T]:
+    async def delete(self, model: type[_T], *filters: Any) -> Iterable[_T]:
         """Delete the items that fulfill the given filters
 
         Args:
