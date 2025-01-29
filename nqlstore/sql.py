@@ -1,6 +1,6 @@
 """SQL implementation"""
 
-from typing import Any, AsyncIterable, Iterable, TypeVar
+from typing import Any, Iterable, TypeVar
 
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.sql._typing import (
@@ -9,7 +9,6 @@ from sqlalchemy.sql._typing import (
 )
 from sqlmodel import *
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel.sql._expression_select_cls import Select
 
 from ._base import BaseStore
 
@@ -33,12 +32,14 @@ class SQLStore(BaseStore):
 
     async def insert(
         self, model: type[_T], items: Iterable[_T | dict], **kwargs
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         parsed_items = [v if isinstance(v, model) else model(**v) for v in items]
         async with AsyncSession(self._engine) as session:
-            return await session.stream_scalars(
-                insert(model).returning(model), parsed_items
-            )
+            stmt = insert(model).returning(model)
+            cursor = await session.stream_scalars(stmt, parsed_items)
+            await session.commit()
+            results = await cursor.all()
+            return list(results)
 
     async def find(
         self,
@@ -48,24 +49,34 @@ class SQLStore(BaseStore):
         limit: int | None = None,
         sort: tuple[_ColumnExpressionOrStrLabelArgument[Any]] = (),
         **kwargs,
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         async with AsyncSession(self._engine) as session:
-            return await session.stream_scalars(
+            cursor = await session.stream_scalars(
                 select(model).where(*filters).limit(limit).offset(skip).order_by(*sort)
             )
+            results = await cursor.all()
+            return list(results)
 
     async def update(
         self, model: type[_T], *filters: _Filter, updates: dict, **kwargs
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         async with AsyncSession(self._engine) as session:
-            return await session.stream_scalars(
-                update(model).where(*filters).values(**updates).returning(model)
+            stmt = (
+                update(model)
+                .where(*filters)
+                .values(**updates)
+                .returning(model.__table__)
             )
+            cursor = await session.stream(stmt)
+            results = await cursor.fetchall()
+            await session.commit()
+            return [model(**row._mapping) for row in results]
 
-    async def delete(
-        self, model: type[_T], *filters: _Filter, **kwargs
-    ) -> AsyncIterable[_T]:
+    async def delete(self, model: type[_T], *filters: _Filter, **kwargs) -> list[_T]:
         async with AsyncSession(self._engine) as session:
-            return await session.stream_scalars(
-                delete(model).where(*filters).returning(model)
+            cursor = await session.stream(
+                delete(model).where(*filters).returning(model.__table__)
             )
+            results = await cursor.all()
+            await session.commit()
+            return [model(**row._mapping) for row in results]

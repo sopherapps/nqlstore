@@ -123,7 +123,7 @@ from nqlstore.sql import SQLStore
 from .models import Book, Library
 
 if __name__ == "__main__":
-    store = SQLStore(uri="sqlite:///database.db")
+    store = SQLStore(uri="sqlite+aiosqlite:///database.db")
     store.register([
         Library,
         Book,
@@ -176,7 +176,7 @@ Filtering styles native to the different database technologies are supported out
 Inserting new items in a store, call `store.insert(Type[Model], List[dict])` method.
 
 ```python
-new_library = await store.insert(Library, [{}, {}])
+new_libraries = await store.insert(Library, [{}, {}])
 ```
 
 #### Find

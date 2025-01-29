@@ -1,6 +1,6 @@
 """MongoDB implementation"""
 
-from typing import Any, AsyncIterable, Iterable, Mapping, TypeVar
+from typing import Any, Iterable, Mapping, TypeVar
 
 from beanie import *
 from bson import ObjectId
@@ -52,12 +52,14 @@ class MongoStore(BaseStore):
         session: AsyncIOMotorClientSession | None = None,
         link_rule: WriteRules = WriteRules.DO_NOTHING,
         **pymongo_kwargs: Any,
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         parsed_items = [v if isinstance(v, model) else model(**v) for v in items]
         results = await model.insert_many(
             parsed_items, session=session, link_rule=link_rule, **pymongo_kwargs
         )
-        return model.find({"_id": {"$in": results.inserted_ids}}, session=session)
+        return await model.find(
+            {"_id": {"$in": results.inserted_ids}}, session=session
+        ).to_list()
 
     async def find(
         self,
@@ -74,8 +76,8 @@ class MongoStore(BaseStore):
         nesting_depth: int | None = None,
         nesting_depths_per_field: dict[str, int] | None = None,
         **pymongo_kwargs: Any,
-    ) -> AsyncIterable[_T]:
-        return model.find(
+    ) -> list[_T]:
+        return await model.find(
             *filters,
             skip=skip,
             limit=limit,
@@ -87,7 +89,7 @@ class MongoStore(BaseStore):
             nesting_depth=nesting_depth,
             nesting_depths_per_field=nesting_depths_per_field,
             **pymongo_kwargs,
-        )
+        ).to_list()
 
     async def update(
         self,
@@ -104,7 +106,7 @@ class MongoStore(BaseStore):
         bulk_writer: BulkWriter | None = None,
         upsert=False,
         **pymongo_kwargs: Any,
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         cursor = model.find(
             *filters,
             session=session,
@@ -120,7 +122,7 @@ class MongoStore(BaseStore):
         await cursor.update(
             updates, session=session, bulk_writer=bulk_writer, upsert=upsert
         )
-        return model.find({"_id": {"$in": ids}})
+        return await model.find({"_id": {"$in": ids}}).to_list()
 
     async def delete(
         self,
@@ -135,7 +137,7 @@ class MongoStore(BaseStore):
         nesting_depths_per_field: dict[str, int] | None = None,
         bulk_writer: BulkWriter | None = None,
         **pymongo_kwargs: Any,
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         cursor = model.find(
             *filters,
             session=session,
@@ -149,10 +151,7 @@ class MongoStore(BaseStore):
         )
         deleted_items = await cursor.to_list()
         await cursor.delete(session=session, bulk_writer=bulk_writer)
-
-        for value in deleted_items:
-            # This is here just to have a predictable uniform API
-            yield value
+        return deleted_items
 
 
 class _IdOnly(BaseModel):

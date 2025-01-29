@@ -30,14 +30,12 @@ class RedisStore(BaseStore):
         pipeline: Pipeline | None = None,
         pipeline_verifier: Callable[..., Any] = verify_pipeline_response,
         **kwargs,
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         parsed_items = [v if isinstance(v, model) else model(**v) for v in items]
         results = await model.add(
             parsed_items, pipeline=pipeline, pipeline_verifier=pipeline_verifier
         )
-
-        for result in results:
-            yield result
+        return list(results)
 
     async def find(
         self,
@@ -48,7 +46,7 @@ class RedisStore(BaseStore):
         sort: tuple[str] | None = None,
         knn: KNNExpression | None = None,
         **kwargs,
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         query = model.find(*filters, knn=knn)
         return await query.copy(
             offset=skip, sort_fields=sort, limit=limit, **kwargs
@@ -61,7 +59,7 @@ class RedisStore(BaseStore):
         updates: dict,
         knn: KNNExpression | None = None,
         **kwargs,
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         query = model.find(*filters, knn=knn)
         matched_items = await query.copy(**kwargs).all()
         updated_pks = []
@@ -78,9 +76,8 @@ class RedisStore(BaseStore):
         knn: KNNExpression | None = None,
         pipeline: Pipeline | None = None,
         **kwargs,
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         query = model.find(*filters, knn=knn)
         matched_items = await query.copy(**kwargs).all()
         await model.delete_many(matched_items, pipeline=pipeline)
-
         return matched_items

@@ -27,7 +27,11 @@ test = [
     "isort~=5.13.2",
     "black~=24.10.0",
 ]
-sql = ["sqlmodel~=0.0.22"]
+sql = [
+    "sqlmodel~=0.0.22",
+    "aiosqlite~=0.20.0",
+    "greenlet~=3.1.1",
+]
 mongo = ["beanie~=1.29.0"]
 redis = ["redis-om~=0.3.3"]
 
@@ -36,3 +40,6 @@ packages = ["nqlstore"]
 
 [tool.isort]
 skip_gitignore = true
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"

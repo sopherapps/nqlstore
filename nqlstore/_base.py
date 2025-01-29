@@ -1,7 +1,7 @@
 """The module with the abstract classes for this package"""
 
 import abc
-from typing import Any, AsyncIterable, Iterable, TypeVar
+from typing import Any, Iterable, TypeVar
 
 from pydantic import BaseModel
 
@@ -31,7 +31,7 @@ class BaseStore(abc.ABC):
     @abc.abstractmethod
     async def insert(
         self, model: type[_T], items: Iterable[_T | dict], **kwargs
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         """Inserts the items to the store
 
         Args:
@@ -52,7 +52,7 @@ class BaseStore(abc.ABC):
         limit: int | None = None,
         sort: Any = None,
         **kwargs,
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         """Find the items that fulfill the given filters
 
         Args:
@@ -70,7 +70,7 @@ class BaseStore(abc.ABC):
     @abc.abstractmethod
     async def update(
         self, model: type[_T], *filters: Any, updates: dict, **kwargs
-    ) -> AsyncIterable[_T]:
+    ) -> list[_T]:
         """Update the items that fulfill the given filters
 
         Args:
@@ -84,9 +84,7 @@ class BaseStore(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def delete(
-        self, model: type[_T], *filters: Any, **kwargs
-    ) -> AsyncIterable[_T]:
+    async def delete(self, model: type[_T], *filters: Any, **kwargs) -> list[_T]:
         """Delete the items that fulfill the given filters
 
         Args:
