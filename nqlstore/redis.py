@@ -1,7 +1,5 @@
 """Redis implementation"""
 
-from __future__ import annotations
-
 from typing import Any, Callable, Iterable, TypeVar
 
 from aredis_om import *
@@ -24,6 +22,7 @@ class RedisStore(BaseStore):
         # set the redis instances of all passed models to the current redis instance
         for model in models:
             model.Meta.database = self._db
+        await Migrator().run()
 
     async def insert(
         self,
@@ -50,9 +49,13 @@ class RedisStore(BaseStore):
         **kwargs,
     ) -> list[_T]:
         query = model.find(*filters, knn=knn)
-        return await query.copy(
-            offset=skip, sort_fields=sort, limit=limit, **kwargs
-        ).all()
+
+        kwargs["offset"] = skip
+        kwargs["limit"] = limit
+        if sort:
+            kwargs["sort_fields"] = sort
+
+        return await query.copy(**kwargs).all()
 
     async def update(
         self,
@@ -69,7 +72,7 @@ class RedisStore(BaseStore):
             await item.update(**updates)
             updated_pks.append(item.pk)
 
-        return await model.find(model.pk << updated_pks).all()
+        return await model.find((model.pk << updated_pks)).all()
 
     async def delete(
         self,

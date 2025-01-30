@@ -72,6 +72,9 @@ class Book(SQLModel, table=True):
 
 #### Redis (use [RedisOM](https://redis.io/docs/latest/integrate/redisom-for-python/) models)
 
+**Take note that JsonModel, EmbeddedJsonModel require RedisJSON, while queries require RedisSearch to be loaded**
+**You need to install [redis-stack](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/) or load the modules manually**
+
 ```python
 # models.py
 from typing import List 
@@ -271,6 +274,11 @@ libraries = await store.delete(Library, (Library.name == "Hairora") & (Library.a
 libraries = await store.delete(Library, 
                              {"name": "Hairora", "address": {"$ne": "Buhimba"}})
 ```
+
+## TODO:
+
+- [ ] Create single, simpler, querying language to be used for all of them
+- [ ] Abstract away the specific querying format but allow passing it if one is interested (say as an extra kwarg) 
 
 ## License
 

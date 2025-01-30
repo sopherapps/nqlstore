@@ -1,0 +1,102 @@
+import pytest
+
+from nqlstore.redis import Field, HashModel
+from tests.utils import insert_test_data, load_fixture
+
+_LIBRARY_DATA = load_fixture("libraries.json")
+
+
+class Library(HashModel):
+    address: str
+    name: str = Field(index=True, full_text_search=True)
+
+    @property
+    def id(self):
+        return self.pk
+
+
+class Book(HashModel):
+    title: str = Field(index=True)
+    library_id: str
+
+    @property
+    def id(self):
+        return self.pk
+
+
+@pytest.mark.asyncio
+async def test_find(redis_store):
+    """Update should update the items that match the filter"""
+    inserted_libs, inserted_books = await insert_test_data(
+        redis_store, library_model=Library, book_model=Book
+    )
+
+    got = await redis_store.find(Library, skip=1)
+    expected = [v for idx, v in enumerate(inserted_libs) if idx >= 1]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+async def test_create(redis_store):
+    """Create should add many items to the sql database"""
+    await redis_store.register([Library, Book])
+    got = await redis_store.insert(Library, _LIBRARY_DATA)
+    got = [v.dict(exclude={"pk"}) for v in got]
+    assert got == _LIBRARY_DATA
+
+
+@pytest.mark.asyncio
+async def test_update(redis_store):
+    """Update should update the items that match the filter"""
+    inserted_libs, _ = await insert_test_data(
+        redis_store, library_model=Library, book_model=Book
+    )
+    updates = {"address": "some new address"}
+    startswith_bu = lambda v: v.name.lower().startswith("bu")
+
+    expected_data_in_db = [
+        (record.model_copy(update=updates) if startswith_bu(record) else record)
+        for record in inserted_libs
+    ]
+    # in immediate response
+    # NOTE: redis startswith/contains on single letters is not supported by redis
+    got = await redis_store.update(
+        Library, Library.name.startswith("bu"), updates=updates
+    )
+    expected = list(filter(startswith_bu, expected_data_in_db))
+    assert got == expected
+
+    # all library data in database
+    got = await redis_store.find(Library)
+    assert _sort_by_name(got) == _sort_by_name(expected_data_in_db)
+
+
+@pytest.mark.asyncio
+async def test_delete(redis_store):
+    """Delete should remove the items that match the filter"""
+    inserted_libs, _ = await insert_test_data(
+        redis_store, library_model=Library, book_model=Book
+    )
+
+    # in immediate response
+    # NOTE: redis startswith/contains on single letters is not supported by redis
+    got = await redis_store.delete(Library, Library.name.startswith("bu"))
+    expected = [v for v in inserted_libs if v.name.lower().startswith("bu")]
+    assert got == expected
+
+    # all data in database
+    got = await redis_store.find(Library)
+    expected = [v for v in inserted_libs if not v.name.lower().startswith("bu")]
+    assert _sort_by_name(got) == _sort_by_name(expected)
+
+
+def _sort_by_name(libraries: list[Library]) -> list[Library]:
+    """Sorts the given libraries by name
+
+    Args:
+        libraries: the libraries to sort
+
+    Returns:
+        the sorted libraries
+    """
+    return sorted(libraries, key=lambda v: v.name)

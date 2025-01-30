@@ -1,7 +1,5 @@
 """SQL implementation"""
 
-from __future__ import annotations
-
 from typing import Any, Iterable, TypeVar
 
 from sqlalchemy.ext.asyncio import create_async_engine
