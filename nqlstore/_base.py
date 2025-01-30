@@ -1,5 +1,7 @@
 """The module with the abstract classes for this package"""
 
+from __future__ import annotations
+
 import abc
 from typing import Any, Iterable, TypeVar
 

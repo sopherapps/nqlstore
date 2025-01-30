@@ -1,11 +1,12 @@
 """MongoDB implementation"""
 
+from __future__ import annotations
+
 from typing import Any, Iterable, Mapping, TypeVar
 
 from beanie import *
-from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorClientSession
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from nqlstore._base import BaseStore
 
@@ -118,7 +119,7 @@ class MongoStore(BaseStore):
             nesting_depths_per_field=nesting_depths_per_field,
             **pymongo_kwargs,
         )
-        ids = [(await v).id async for v in cursor.project(_IdOnly)]
+        ids = [v.id async for v in cursor.project(_IdOnly)]
         await cursor.update(
             updates, session=session, bulk_writer=bulk_writer, upsert=upsert
         )
@@ -157,9 +158,4 @@ class MongoStore(BaseStore):
 class _IdOnly(BaseModel):
     """Class used for projecting only id"""
 
-    id: PydanticObjectId
-
-    class Config:
-        json_encoders = {ObjectId: str}
-        allow_population_by_field_name = True
-        fields = {"id": "_id"}
+    id: PydanticObjectId = Field(alias="_id")

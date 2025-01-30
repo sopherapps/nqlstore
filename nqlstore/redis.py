@@ -1,6 +1,8 @@
 """Redis implementation"""
 
-from typing import Any, AsyncIterable, Callable, Iterable, TypeVar
+from __future__ import annotations
+
+from typing import Any, Callable, Iterable, TypeVar
 
 from aredis_om import *
 from aredis_om.model.model import Expression, verify_pipeline_response
