@@ -196,20 +196,25 @@ The filters on the other hand are different for each type of database technology
 ##### SQL filtering is SQLModel-style
 
 ```python
-libraries = await store.find(Library, Library.name == "Hairora", Library.address != "Buhimba")
+libraries = await store.find(
+    Library, Library.name == "Hairora", Library.address != "Buhimba"
+)
 ```
 
 ##### Redis filtering is RedisOM-style
 
 ```python
-libraries = await store.find(Library, (Library.name == "Hairora") & (Library.address != "Buhimba"))
+libraries = await store.find(
+    Library, (Library.name == "Hairora") & (Library.address != "Buhimba")
+)
 ```
 
 ##### Mongo filtering is MongoDB-style
 
 ```python
-libraries = await store.find(Library, 
-                             {"name": "Hairora", "address": {"$ne": "Buhimba"}})
+libraries = await store.find(
+    Library, {"name": "Hairora", "address": {"$ne": "Buhimba"}}
+)
 ```
 
 #### Update
@@ -224,9 +229,9 @@ Similarly, `updates` are different for each type of database technology as allud
 
 ```python
 libraries = await store.update(
-  Library, 
-  Library.name == "Hairora", Library.address != "Buhimba", 
-  updates={"name": "Foo"},
+    Library, 
+    Library.name == "Hairora", Library.address != "Buhimba", 
+    updates={"name": "Foo"},
 )
 ```
 
@@ -234,9 +239,9 @@ libraries = await store.update(
 
 ```python
 libraries = await store.update(
-  Library, 
-  (Library.name == "Hairora") & (Library.address != "Buhimba"), 
-  updates={"name": "Foo"},
+    Library, 
+    (Library.name == "Hairora") & (Library.address != "Buhimba"), 
+    updates={"name": "Foo"},
 )
 ```
 
@@ -244,9 +249,9 @@ libraries = await store.update(
 
 ```python
 libraries = await store.update(
-  Library, 
-  {"name": "Hairora", "address": {"$ne": "Buhimba"}}, 
-  updates={"$set": {"name": "Foo"}},
+    Library,
+    {"name": "Hairora", "address": {"$ne": "Buhimba"}},
+    updates={"$set": {"name": "Foo"}},
 )
 ```
 
@@ -259,20 +264,25 @@ The `filters` follow the same style as that used when reading as shown [above](#
 ##### SQL filtering is SQLModel-style
 
 ```python
-libraries = await store.delete(Library, Library.name == "Hairora", Library.address != "Buhimba")
+libraries = await store.delete(
+    Library, Library.name == "Hairora", Library.address != "Buhimba"
+)
 ```
 
 ##### Redis filtering is RedisOM-style
 
 ```python
-libraries = await store.delete(Library, (Library.name == "Hairora") & (Library.address != "Buhimba"))
+libraries = await store.delete(
+    Library, (Library.name == "Hairora") & (Library.address != "Buhimba")
+)
 ```
 
 ##### Mongo filtering is MongoDB-style
 
 ```python
-libraries = await store.delete(Library, 
-                             {"name": "Hairora", "address": {"$ne": "Buhimba"}})
+libraries = await store.delete(
+  Library, {"name": "Hairora", "address": {"$ne": "Buhimba"}}
+)
 ```
 
 ## TODO:
