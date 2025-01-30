@@ -288,6 +288,7 @@ libraries = await store.delete(
 ## TODO:
 
 - [ ] Create single, simpler, querying language to be used for all of them
+  - [ ] Use the Mongo DB query language as it seems very rich and very flexible
 - [ ] Abstract away the specific querying format but allow passing it if one is interested (say as an extra kwarg) 
 
 ## License
