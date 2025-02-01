@@ -4,6 +4,7 @@ from nqlstore.redis import Field, HashModel
 from tests.utils import insert_test_data, load_fixture
 
 _LIBRARY_DATA = load_fixture("libraries.json")
+_TEST_ADDRESS = "Hoima, Uganda"
 
 
 class Library(HashModel):
@@ -30,15 +31,16 @@ async def test_find_native(redis_store):
     inserted_libs, inserted_books = await insert_test_data(
         redis_store, library_model=Library, book_model=Book
     )
-    address = "Hoima, Uganda"
 
     got = await redis_store.find(
-        Library, (Library.address == address) | (Library.name.startswith("ba")), skip=1
+        Library,
+        (Library.address == _TEST_ADDRESS) | (Library.name.startswith("ba")),
+        skip=1,
     )
     expected = [
         v
         for v in inserted_libs
-        if v.address == address or v.name.lower().startswith("ba")
+        if v.address == _TEST_ADDRESS or v.name.lower().startswith("ba")
     ][1:]
     assert got == expected
 
@@ -50,14 +52,16 @@ async def test_find_mongo_style(redis_store):
         redis_store, library_model=Library, book_model=Book
     )
 
-    address = "Hoima, Uganda"
-
     got = await redis_store.find(
         Library,
-        nql_query={"$or": [{"address": {"$eq": address}}, {"name": {"$eq": "Bar"}}]},
+        nql_query={
+            "$or": [{"address": {"$eq": _TEST_ADDRESS}}, {"name": {"$eq": "Bar"}}]
+        },
         skip=1,
     )
-    expected = [v for v in inserted_libs if v.address == address or v.name == "Bar"][1:]
+    expected = [
+        v for v in inserted_libs if v.address == _TEST_ADDRESS or v.name == "Bar"
+    ][1:]
     assert got == expected
 
 
@@ -68,18 +72,16 @@ async def test_find_hybrid(redis_store):
         redis_store, library_model=Library, book_model=Book
     )
 
-    address = "Hoima, Uganda"
-
     got = await redis_store.find(
         Library,
         (Library.name.startswith("ba")),
-        nql_query={"address": {"$eq": address}},
+        nql_query={"address": {"$eq": _TEST_ADDRESS}},
         skip=1,
     )
     expected = [
         v
         for v in inserted_libs
-        if v.address == address or v.name.lower().startswith("ba")
+        if v.address == _TEST_ADDRESS or v.name.lower().startswith("ba")
     ][1:]
     assert got == expected
 
@@ -94,24 +96,88 @@ async def test_create(redis_store):
 
 
 @pytest.mark.asyncio
-async def test_update(redis_store):
-    """Update should update the items that match the filter"""
+async def test_update_native(redis_store):
+    """Update should update the items that match the native filter"""
     inserted_libs, _ = await insert_test_data(
         redis_store, library_model=Library, book_model=Book
     )
     updates = {"address": "some new address"}
-    startswith_bu = lambda v: v.name.lower().startswith("bu")
+    matches_query = lambda v: v.name.startswith("Bu") and v.address == _TEST_ADDRESS
 
     expected_data_in_db = [
-        (record.model_copy(update=updates) if startswith_bu(record) else record)
+        (record.model_copy(update=updates) if matches_query(record) else record)
         for record in inserted_libs
     ]
     # in immediate response
     # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await redis_store.update(
-        Library, Library.name.startswith("bu"), updates=updates
+        Library,
+        (Library.name.startswith("Bu") & (Library.address == _TEST_ADDRESS)),
+        updates=updates,
     )
-    expected = list(filter(startswith_bu, expected_data_in_db))
+    expected = list(filter(matches_query, expected_data_in_db))
+    assert got == expected
+
+    # all library data in database
+    got = await redis_store.find(Library)
+    assert _sort_by_name(got) == _sort_by_name(expected_data_in_db)
+
+
+@pytest.mark.asyncio
+async def test_update_mongo_style(redis_store):
+    """Update should update the items that match the mongodb-like filter"""
+    inserted_libs, _ = await insert_test_data(
+        redis_store, library_model=Library, book_model=Book
+    )
+    updates = {"address": "some new address"}
+    matches_query = lambda v: v.name != "Kisaasi" and v.address == _TEST_ADDRESS
+
+    expected_data_in_db = [
+        (record.model_copy(update=updates) if matches_query(record) else record)
+        for record in inserted_libs
+    ]
+    # in immediate response
+    # NOTE: redis startswith/contains on single letters is not supported by redis
+    got = await redis_store.update(
+        Library,
+        nql_query={
+            "$and": [
+                {"name": {"$not": {"$eq": "Kisaasi"}}},
+                {"address": {"$eq": _TEST_ADDRESS}},
+            ]
+        },
+        updates=updates,
+    )
+    expected = list(filter(matches_query, expected_data_in_db))
+    assert got == expected
+
+    # all library data in database
+    got = await redis_store.find(Library)
+    assert _sort_by_name(got) == _sort_by_name(expected_data_in_db)
+
+
+@pytest.mark.asyncio
+async def test_update_hybrid(redis_store):
+    """Update should update the items that match the mongodb-like filter AND the native filter"""
+    inserted_libs, _ = await insert_test_data(
+        redis_store, library_model=Library, book_model=Book
+    )
+    updates = {"address": "some new address"}
+    matches_query = lambda v: v.name.startswith("Bu") and v.address == _TEST_ADDRESS
+
+    expected_data_in_db = [
+        (record.model_copy(update=updates) if matches_query(record) else record)
+        for record in inserted_libs
+    ]
+    # in immediate response
+    # NOTE: redis startswith/contains on single letters is not supported by redis
+    got = await redis_store.update(
+        Library,
+        (Library.name.startswith("Bu")),
+        nql_query={"address": {"$eq": _TEST_ADDRESS}},
+        updates=updates,
+    )
+    expected = list(filter(matches_query, expected_data_in_db))
     assert got == expected
 
     # all library data in database
