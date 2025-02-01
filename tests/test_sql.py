@@ -19,14 +19,58 @@ class Book(SQLModel, table=True):
 
 
 @pytest.mark.asyncio
-async def test_find(sql_store):
-    """Update should update the items that match the filter"""
+async def test_find_native(sql_store):
+    """Find should return the items that match the native filter"""
+    inserted_libs, inserted_books = await insert_test_data(
+        sql_store, library_model=Library, book_model=Book
+    )
+    address = "Hoima, Uganda"
+
+    got = await sql_store.find(
+        Library, (Library.address == address) | (Library.name.startswith("Ba")), skip=1
+    )
+    expected = [
+        v for v in inserted_libs if v.address == address or v.name.startswith("Ba")
+    ][1:]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+async def test_find_mongo_style(sql_store):
+    """Find should return the items that match the mongodb-like filter"""
     inserted_libs, inserted_books = await insert_test_data(
         sql_store, library_model=Library, book_model=Book
     )
 
-    got = await sql_store.find(Library, Library.id > 1, skip=1)
-    expected = [v for v in inserted_libs if v.id > 2]
+    address = "Hoima, Uganda"
+
+    got = await sql_store.find(
+        Library,
+        nql_query={"$or": [{"address": {"$eq": address}}, {"name": {"$eq": "Bar"}}]},
+        skip=1,
+    )
+    expected = [v for v in inserted_libs if v.address == address or v.name == "Bar"][1:]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+async def test_find_hybrid(sql_store):
+    """Find should return the items that match the mongodb-like filter AND the native filter"""
+    inserted_libs, inserted_books = await insert_test_data(
+        sql_store, library_model=Library, book_model=Book
+    )
+
+    address = "Hoima, Uganda"
+
+    got = await sql_store.find(
+        Library,
+        (Library.name.startswith("Ba")),
+        nql_query={"address": {"$eq": address}},
+        skip=1,
+    )
+    expected = [
+        v for v in inserted_libs if v.address == address or v.name.startswith("Ba")
+    ][1:]
     assert got == expected
 
 
