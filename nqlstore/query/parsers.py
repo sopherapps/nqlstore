@@ -29,9 +29,11 @@ class QueryPredicate(ABC):
     __slots__ = ("selector", "value", "parser")
     selector: str | None
     value: Any
-    parser: "Parser"
+    parser: "QueryParser"
 
-    def __init__(self, selector: str | None, value: Any, parser: "Parser", **kwargs):
+    def __init__(
+        self, selector: str | None, value: Any, parser: "QueryParser", **kwargs
+    ):
         self.selector = selector
         self.value = value
         self.parser = parser
@@ -83,23 +85,23 @@ class RootPredicate(QueryPredicate):
     )
     value: list[QueryPredicate]
     selector: None
-    __sql_model__: SQLModel
-    __redis_model__: RedisModel
+    __sql_model__: type[SQLModel]
+    __redis_model__: type[RedisModel]
 
     def __init__(
         self,
         value: QuerySelector,
-        parser: Union["Parser", None] = None,
-        __sql_model__: SQLModel | None = None,
-        __redis_model__: RedisModel | None = None,
+        parser: Union["QueryParser", None] = None,
+        __sql_model__: type[SQLModel] | None = None,
+        __redis_model__: type[RedisModel] | None = None,
         **kwargs,
     ):
         self.__sql_model__ = __sql_model__
         self.__redis_model__ = __redis_model__
         if parser is None:
-            parser = Parser()
+            parser = QueryParser()
         super().__init__(selector=None, value=None, parser=parser)
-        self.value = self.parser.parse(value, parent=self)
+        self.value = self.parser._parse(value, parent=self)
 
     def to_mongo(self) -> _MongoFilter:
         return {v.selector: v.to_mongo() for v in self.value}
@@ -137,8 +139,8 @@ class FieldPredicate(QueryPredicate):
         selector: str,
         value: OperatorSelector,
         parent: QueryPredicate,
-        __sql_model__: SQLModel | None = None,
-        __redis_model__: RedisModel | None = None,
+        __sql_model__: type[SQLModel] | None = None,
+        __redis_model__: type[RedisModel] | None = None,
         **kwargs,
     ):
         if __sql_model__:
@@ -148,7 +150,7 @@ class FieldPredicate(QueryPredicate):
             self.__redis_field__ = getattr(__redis_model__, selector)
 
         super().__init__(selector=selector, value=None, parser=parent.parser)
-        self.value = self.parser.parse(value, parent=self)
+        self.value = self.parser._parse(value, parent=self)
 
     def to_mongo(self) -> _MongoFilter:
         return {self.selector: _merge_dicts([v.to_mongo() for v in self.value])}
@@ -346,7 +348,7 @@ class NotPredicate(QueryPredicate):
         self.parent = parent
 
         super().__init__(selector="$not", value=None, **kwargs)
-        self.value = self.parser.parse(value, parent=self)
+        self.value = self.parser._parse(value, parent=self)
 
     def to_mongo(self) -> _MongoFilter:
         positive_predicate = _merge_dicts([v.to_mongo() for v in self.value])
@@ -378,7 +380,7 @@ class MultiLogicalPredicate(QueryPredicate, ABC):
     ):
         self.parent = parent
         super().__init__(selector=selector, value=None, parser=parent.parser, **kwargs)
-        self.value = [self.parser.parse(v, parent=parent) for v in value]
+        self.value = [self.parser._parse(v, parent=parent) for v in value]
 
     def to_mongo(self) -> _MongoFilter:
         predicates = [
@@ -509,7 +511,7 @@ class MongoOnlyPredicate(QueryPredicate):
         return ()
 
 
-class Parser(dict):
+class QueryParser(dict):
     """The registry of parsers of each section of the query selector
 
     This can be overridden to provide custom parsers for specific query selectors
@@ -609,7 +611,37 @@ class Parser(dict):
 
         super().__init__()
 
-    def parse(
+    def to_redis(
+        self, model: type[RedisModel], query: QuerySelector
+    ) -> tuple[_SQLFilter, ...]:
+        """Converts the mongodb-like NQL query to redis specific filters
+
+        Args:
+            model: the current redis model being queried
+            query: the mongodb-like query
+
+        Returns:
+            the redis filters to pass to the redis finder function
+        """
+        root = RootPredicate(value=query, parser=self, __redis_model__=model)
+        return root.to_redis()
+
+    def to_sql(
+        self, model: type[SQLModel], query: QuerySelector
+    ) -> tuple[_SQLFilter, ...]:
+        """Converts the mongodb-like NQL query to SQL specific filters
+
+        Args:
+            model: the current SQL model being queried
+            query: the mongodb-like query
+
+        Returns:
+            the SQL filters to pass to the SQL finder function
+        """
+        root = RootPredicate(value=query, parser=self, __sql_model__=model)
+        return root.to_sqlalchemy()
+
+    def _parse(
         self,
         selector: QuerySelector | OperatorSelector,
         parent: QueryPredicate,

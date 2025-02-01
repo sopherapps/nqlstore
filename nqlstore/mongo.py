@@ -94,7 +94,7 @@ class MongoStore(BaseStore):
         self,
         model: type[_T],
         *filters: _Filter,
-        updates: dict,
+        updates: dict | None = None,
         session: AsyncIOMotorClientSession | None = None,
         ignore_cache: bool = False,
         fetch_links: bool = False,
@@ -106,6 +106,9 @@ class MongoStore(BaseStore):
         upsert=False,
         **pymongo_kwargs: Any,
     ) -> list[_T]:
+        if updates is None:
+            updates = {}
+
         cursor = model.find(
             *filters,
             session=session,

@@ -5,18 +5,23 @@ from typing import Any, Iterable, TypeVar
 
 from pydantic import BaseModel
 
+from nqlstore.query.parsers import QueryParser
+from nqlstore.query.selectors import QuerySelector
+
 _T = TypeVar("_T", bound=BaseModel)
 
 
 class BaseStore(abc.ABC):
     """Abstract class for storing data"""
 
-    def __init__(self, uri: str, **kwargs):
+    def __init__(self, uri: str, parser: QueryParser | None = None, **kwargs):
         """
         Args:
             uri: the URI to the underlying store
+            parser: the query parser for parsing NQL mongodb-like queries.
             kwargs: extra key-word args to pass to the initializer
         """
+        self._parser = parser
         self._uri = uri
 
     @abc.abstractmethod
@@ -48,6 +53,7 @@ class BaseStore(abc.ABC):
         self,
         model: type[_T],
         *filters: Any,
+        nql_query: QuerySelector | None = None,
         skip: int = 0,
         limit: int | None = None,
         sort: Any = None,
@@ -57,6 +63,7 @@ class BaseStore(abc.ABC):
 
         Args:
             filters: the things to match against
+            nql_query: alternative mongodb-like query object to us alongside or instead of native filters
             model: the model whose instances are being queried
             skip: number of records to ignore at the top of the returned results; default is 0
             limit: maximum number of records to return; default is None.
@@ -69,12 +76,18 @@ class BaseStore(abc.ABC):
 
     @abc.abstractmethod
     async def update(
-        self, model: type[_T], *filters: Any, updates: dict, **kwargs
+        self,
+        model: type[_T],
+        *filters: Any,
+        nql_query: QuerySelector | None = None,
+        updates: dict | None = None,
+        **kwargs,
     ) -> list[_T]:
         """Update the items that fulfill the given filters
 
         Args:
             filters: the things to match against
+            nql_query: alternative mongodb-like query object to us alongside or instead of native filters
             updates: the payload to update the items with
             model: the model whose instances are being updated
             kwargs: extra key-word args to pass to the underlying update method
@@ -84,11 +97,18 @@ class BaseStore(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def delete(self, model: type[_T], *filters: Any, **kwargs) -> list[_T]:
+    async def delete(
+        self,
+        model: type[_T],
+        *filters: Any,
+        nql_query: QuerySelector | None = None,
+        **kwargs,
+    ) -> list[_T]:
         """Delete the items that fulfill the given filters
 
         Args:
             filters: the things to match against
+            nql_query: alternative mongodb-like query object to us alongside or instead of native filters
             model: the model whose instances are being deleted
             kwargs: extra key-word args to pass to the underlying delete method
 
