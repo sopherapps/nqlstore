@@ -32,6 +32,13 @@ _NeSelector = TypedDict("_NeSelector", {"$ne": Any})
 _NinSelector = TypedDict("_NinSelector", {"$nin": list[Any]})
 """field is not in list: ``{ $nin: [ <value1>, <value2> ... <valueN> ] }``"""
 
+## Element
+_ExistsSelector = TypedDict("_ExistsSelector", {"$exists": bool})
+"""field exists: ``{ $exists: <boolean> }``"""
+
+_TypeSelector = TypedDict("_TypeSelector", {"$type": Any})
+"""field is given BSON type: ``{ $type: <value1> }``"""
+
 ## Logical
 OperatorSelector = (
     _EqSelector
@@ -42,6 +49,8 @@ OperatorSelector = (
     | _LteSelector
     | _NeSelector
     | _NinSelector
+    | _ExistsSelector
+    | _TypeSelector
 )
 FieldSelector = dict[str, OperatorSelector]
 """a comparison on a given field: ``{ field: { <operator>: <operand>}}``"""
