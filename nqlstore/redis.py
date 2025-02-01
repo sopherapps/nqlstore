@@ -7,7 +7,7 @@ from aredis_om.model.model import Expression, verify_pipeline_response
 from redis.client import Pipeline
 
 from nqlstore._base import BaseStore
-from nqlstore.query.parsers import QueryParser, RootPredicate
+from nqlstore.query.parsers import QueryParser
 from nqlstore.query.selectors import QuerySelector
 
 _T = TypeVar("_T", bound=RedisModel)
@@ -44,7 +44,7 @@ class RedisStore(BaseStore):
         self,
         model: type[_T],
         *filters: Any | Expression,
-        nql_query: QuerySelector | None = None,
+        query: QuerySelector | None = None,
         skip: int = 0,
         limit: int | None = None,
         sort: tuple[str] | None = None,
@@ -52,8 +52,8 @@ class RedisStore(BaseStore):
         **kwargs,
     ) -> list[_T]:
         nql_filters = ()
-        if nql_query:
-            nql_filters = self._parser.to_redis(model, query=nql_query)
+        if query:
+            nql_filters = self._parser.to_redis(model, query=query)
 
         query = model.find(*filters, *nql_filters, knn=knn)
 
@@ -68,7 +68,7 @@ class RedisStore(BaseStore):
         self,
         model: type[_T],
         *filters: Any | Expression,
-        nql_query: QuerySelector | None = None,
+        query: QuerySelector | None = None,
         updates: dict | None = None,
         knn: KNNExpression | None = None,
         **kwargs,
@@ -77,8 +77,8 @@ class RedisStore(BaseStore):
             updates = {}
 
         nql_filters = ()
-        if nql_query:
-            nql_filters = self._parser.to_redis(model, query=nql_query)
+        if query:
+            nql_filters = self._parser.to_redis(model, query=query)
 
         query = model.find(*filters, *nql_filters, knn=knn)
         matched_items = await query.copy(**kwargs).all()
@@ -93,14 +93,14 @@ class RedisStore(BaseStore):
         self,
         model: type[_T],
         *filters: Any | Expression,
-        nql_query: QuerySelector | None = None,
+        query: QuerySelector | None = None,
         knn: KNNExpression | None = None,
         pipeline: Pipeline | None = None,
         **kwargs,
     ) -> list[_T]:
         nql_filters = ()
-        if nql_query:
-            nql_filters = self._parser.to_redis(model, query=nql_query)
+        if query:
+            nql_filters = self._parser.to_redis(model, query=query)
 
         query = model.find(*filters, *nql_filters, knn=knn)
         matched_items = await query.copy(**kwargs).all()

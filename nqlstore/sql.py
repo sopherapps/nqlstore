@@ -47,7 +47,7 @@ class SQLStore(BaseStore):
         self,
         model: type[_T],
         *filters: _Filter,
-        nql_query: QuerySelector | None = None,
+        query: QuerySelector | None = None,
         skip: int = 0,
         limit: int | None = None,
         sort: tuple[_ColumnExpressionOrStrLabelArgument[Any]] = (),
@@ -55,8 +55,8 @@ class SQLStore(BaseStore):
     ) -> list[_T]:
         async with AsyncSession(self._engine) as session:
             nql_filters = ()
-            if nql_query:
-                nql_filters = self._parser.to_sql(model, query=nql_query)
+            if query:
+                nql_filters = self._parser.to_sql(model, query=query)
 
             cursor = await session.stream_scalars(
                 select(model)
@@ -72,14 +72,14 @@ class SQLStore(BaseStore):
         self,
         model: type[_T],
         *filters: _Filter,
-        nql_query: QuerySelector | None = None,
+        query: QuerySelector | None = None,
         updates: dict | None = None,
         **kwargs,
     ) -> list[_T]:
         async with AsyncSession(self._engine) as session:
             nql_filters = ()
-            if nql_query:
-                nql_filters = self._parser.to_sql(model, query=nql_query)
+            if query:
+                nql_filters = self._parser.to_sql(model, query=query)
 
             stmt = (
                 update(model)
@@ -96,13 +96,13 @@ class SQLStore(BaseStore):
         self,
         model: type[_T],
         *filters: _Filter,
-        nql_query: QuerySelector | None = None,
+        query: QuerySelector | None = None,
         **kwargs,
     ) -> list[_T]:
         async with AsyncSession(self._engine) as session:
             nql_filters = ()
-            if nql_query:
-                nql_filters = self._parser.to_sql(model, query=nql_query)
+            if query:
+                nql_filters = self._parser.to_sql(model, query=query)
 
             cursor = await session.stream(
                 delete(model).where(*filters, *nql_filters).returning(model.__table__)

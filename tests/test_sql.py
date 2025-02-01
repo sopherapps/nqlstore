@@ -48,9 +48,7 @@ async def test_find_mongo_style(sql_store):
 
     got = await sql_store.find(
         Library,
-        nql_query={
-            "$or": [{"address": {"$eq": _TEST_ADDRESS}}, {"name": {"$eq": "Bar"}}]
-        },
+        query={"$or": [{"address": {"$eq": _TEST_ADDRESS}}, {"name": {"$eq": "Bar"}}]},
         skip=1,
     )
     expected = [
@@ -69,7 +67,7 @@ async def test_find_hybrid(sql_store):
     got = await sql_store.find(
         Library,
         (Library.name.startswith("Ba")),
-        nql_query={"address": {"$eq": _TEST_ADDRESS}},
+        query={"address": {"$eq": _TEST_ADDRESS}},
         skip=1,
     )
     expected = [
@@ -159,7 +157,7 @@ async def test_update_mongo_style(sql_store):
     # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await sql_store.update(
         Library,
-        nql_query={
+        query={
             "$and": [
                 {"name": {"$not": {"$eq": "Kisaasi"}}},
                 {"address": {"$eq": _TEST_ADDRESS}},
@@ -193,7 +191,7 @@ async def test_update_hybrid(sql_store):
     got = await sql_store.update(
         Library,
         (Library.name.startswith("Bu")),
-        nql_query={"address": {"$eq": _TEST_ADDRESS}},
+        query={"address": {"$eq": _TEST_ADDRESS}},
         updates=updates,
     )
     expected = list(filter(matches_query, expected_data_in_db))
@@ -236,7 +234,7 @@ async def test_delete_mongo_style(sql_store):
     # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await sql_store.delete(
         Library,
-        nql_query={
+        query={
             {
                 "$or": [
                     {"$nor": [{"name": {"$eq": name}} for name in unwanted_names]},
@@ -275,7 +273,7 @@ async def test_delete_hybrid(sql_store):
     got = await sql_store.delete(
         Library,
         (Library.name.startswith("bu")),
-        nql_query={"address": {"$nin": unwanted_addresses}},
+        query={"address": {"$nin": unwanted_addresses}},
     )
     expected = [
         v

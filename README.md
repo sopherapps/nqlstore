@@ -167,7 +167,7 @@ if __name__ == "__main__":
 
 ### Use your models in your application
 
-In the rest of you application use the four class methods available on the models.
+In the rest of you application use the four class methods available on the models.  
 Filtering follows the [MongoDb-style](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
 
 However, for more complex queries, one can also pass in querying styles native to the type of the database,
@@ -178,12 +178,12 @@ Or one can simply ignore the MongoDB-style querying and stick to the native quer
 The available querying formats include:
 
 - SQL - [SQLModel-style](https://sqlmodel.tiangolo.com/tutorial/where/#where-and-expressions-instead-of-keyword-arguments)
-- Redis [RedisOM-style](https://redis.io/docs/latest/integrate/redisom-for-python/#create-read-update-and-delete-data)
-- MongoDb [MongoDB-style](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
+- Redis - [RedisOM-style](https://redis.io/docs/latest/integrate/redisom-for-python/#create-read-update-and-delete-data)
+- MongoDb - [MongoDB-style](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
 
 #### Insert
 
-Inserting new items in a store, call `store.insert(Type[Model], List[dict])` method.
+Inserting new items in a store, call `store.insert()` method.
 
 ```python
 new_libraries = await store.insert(Library, [{}, {}])
@@ -191,7 +191,7 @@ new_libraries = await store.insert(Library, [{}, {}])
 
 #### Find
 
-Finding items in a store, call `store.find(Type[Model], *filters: Any, skip: int=0, limit: int | None=None)` method.
+Finding items in a store, call the `store.find()` method.
 
 The key-word arguments include:
 
@@ -200,13 +200,13 @@ The key-word arguments include:
 
 The querying format is as described [above](#use-your-models-in-your-application)   
 
-##### SQL filtering is SQLModel-style
+##### SQL
 
 ###### MongoDB-style:
 
 ```python
 libraries = await store.find(
-    Library, nql_query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
 )
 ```
 
@@ -222,17 +222,17 @@ libraries = await store.find(
 
 ```python
 libraries = await store.find(
-    Library, Library.name == "Hairora", nql_query={"address" : {"$ne": "Buhimba"}}
+    Library, Library.name == "Hairora", query={"address" : {"$ne": "Buhimba"}}
 )
 ```
 
-##### Redis filtering is RedisOM-style
+##### Redis
 
 ###### MongoDB-style:
 
 ```python
 libraries = await store.find(
-    Library, nql_query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
 )
 ```
 
@@ -248,11 +248,11 @@ libraries = await store.find(
 
 ```python
 libraries = await store.find(
-    Library, (Library.name == "Hairora"), nql_query={"address" : {"$ne": "Buhimba"}}
+    Library, (Library.name == "Hairora"), query={"address" : {"$ne": "Buhimba"}}
 )
 ```
 
-##### Mongo filtering is MongoDB-style
+##### Mongo
 
 ```python
 libraries = await store.find(
@@ -262,7 +262,7 @@ libraries = await store.find(
 
 #### Update
 
-Updating items in a store, call `store.update(model: Type[Model], *filters: Any, updates: dict)` method.
+Updating items in a store, call the `store.update()` method.
 
 The method returns the newly updated records.  
 The `filters` follow the same style as that used when querying as shown [above](#read).  
@@ -275,7 +275,7 @@ Similarly, `updates` are different for each type of database technology as allud
 ```python
 libraries = await store.update(
     Library, 
-    nql_query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}},
+    query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}},
     updates={"name": "Foo"},
 )
 ```
@@ -295,7 +295,7 @@ libraries = await store.update(
 ```python
 libraries = await store.update(
     Library, 
-    Library.name == "Hairora", nql_query={"address" : {"$ne": "Buhimba"}},
+    Library.name == "Hairora", query={"address" : {"$ne": "Buhimba"}},
     updates={"name": "Foo"},
 )
 ```
@@ -307,7 +307,7 @@ libraries = await store.update(
 ```python
 libraries = await store.update(
     Library, 
-    nql_query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}},
+    query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}},
     updates={"name": "Foo"},
 )
 ```
@@ -328,7 +328,7 @@ libraries = await store.update(
 libraries = await store.update(
     Library, 
     (Library.name == "Hairora"), 
-    nql_query={"address" : {"$ne": "Buhimba"}},
+    query={"address" : {"$ne": "Buhimba"}},
     updates={"name": "Foo"},
 )
 ```
@@ -346,17 +346,17 @@ libraries = await store.update(
 
 #### Delete
 
-Deleting items in a store, call `store.delete(model: Type[Model], *filters: Any)` method.
+Deleting items in a store, call the `store.delete()` method.
 
 The `filters` follow the same style as that used when reading as shown [above](#read).  
 
-##### SQL filtering is SQLModel-style
+##### SQL
 
 ###### MongoDB-style:
 
 ```python
 libraries = await store.delete(
-    Library, nql_query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
 )
 ```
 
@@ -372,17 +372,17 @@ libraries = await store.delete(
 
 ```python
 libraries = await store.delete(
-    Library, Library.name == "Hairora", nql_query={"address" : {"$ne": "Buhimba"}}
+    Library, Library.name == "Hairora", query={"address" : {"$ne": "Buhimba"}}
 )
 ```
 
-##### Redis filtering is RedisOM-style
+##### Redis
 
 ###### MongoDB-style:
 
 ```python
 libraries = await store.delete(
-    Library, nql_query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
 )
 ```
 
@@ -398,11 +398,11 @@ libraries = await store.delete(
 
 ```python
 libraries = await store.delete(
-    Library, (Library.name == "Hairora"), nql_query={"address" : {"$ne": "Buhimba"}}
+    Library, (Library.name == "Hairora"), query={"address" : {"$ne": "Buhimba"}}
 )
 ```
 
-##### Mongo filtering is MongoDB-style
+##### Mongo
 
 ```python
 libraries = await store.delete(

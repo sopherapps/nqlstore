@@ -53,7 +53,7 @@ class BaseStore(abc.ABC):
         self,
         model: type[_T],
         *filters: Any,
-        nql_query: QuerySelector | None = None,
+        query: QuerySelector | None = None,
         skip: int = 0,
         limit: int | None = None,
         sort: Any = None,
@@ -63,7 +63,7 @@ class BaseStore(abc.ABC):
 
         Args:
             filters: the things to match against
-            nql_query: alternative mongodb-like query object to us alongside or instead of native filters
+            query: alternative mongodb-like query object to us alongside or instead of native filters
             model: the model whose instances are being queried
             skip: number of records to ignore at the top of the returned results; default is 0
             limit: maximum number of records to return; default is None.
@@ -79,7 +79,7 @@ class BaseStore(abc.ABC):
         self,
         model: type[_T],
         *filters: Any,
-        nql_query: QuerySelector | None = None,
+        query: QuerySelector | None = None,
         updates: dict | None = None,
         **kwargs,
     ) -> list[_T]:
@@ -87,7 +87,7 @@ class BaseStore(abc.ABC):
 
         Args:
             filters: the things to match against
-            nql_query: alternative mongodb-like query object to us alongside or instead of native filters
+            query: alternative mongodb-like query object to us alongside or instead of native filters
             updates: the payload to update the items with
             model: the model whose instances are being updated
             kwargs: extra key-word args to pass to the underlying update method
@@ -101,14 +101,14 @@ class BaseStore(abc.ABC):
         self,
         model: type[_T],
         *filters: Any,
-        nql_query: QuerySelector | None = None,
+        query: QuerySelector | None = None,
         **kwargs,
     ) -> list[_T]:
         """Delete the items that fulfill the given filters
 
         Args:
             filters: the things to match against
-            nql_query: alternative mongodb-like query object to us alongside or instead of native filters
+            query: alternative mongodb-like query object to us alongside or instead of native filters
             model: the model whose instances are being deleted
             kwargs: extra key-word args to pass to the underlying delete method
 
