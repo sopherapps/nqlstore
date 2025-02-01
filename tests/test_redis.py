@@ -186,8 +186,8 @@ async def test_update_hybrid(redis_store):
 
 
 @pytest.mark.asyncio
-async def test_delete(redis_store):
-    """Delete should remove the items that match the filter"""
+async def test_delete_native(redis_store):
+    """Delete should delete the items that match the native filter"""
     inserted_libs, _ = await insert_test_data(
         redis_store, library_model=Library, book_model=Book
     )
@@ -201,6 +201,77 @@ async def test_delete(redis_store):
     # all data in database
     got = await redis_store.find(Library)
     expected = [v for v in inserted_libs if not v.name.lower().startswith("bu")]
+    assert _sort_by_name(got) == _sort_by_name(expected)
+
+
+@pytest.mark.asyncio
+async def test_delete_mongo_style(redis_store):
+    """Delete should delete the items that match the mongodb-like filter"""
+    inserted_libs, _ = await insert_test_data(
+        redis_store, library_model=Library, book_model=Book
+    )
+    addresses = ["Bujumbura, Burundi", "Non existent"]
+    unwanted_names = ["Bar", "Kisaasi"]
+
+    # in immediate response
+    # NOTE: redis startswith/contains on single letters is not supported by redis
+    got = await redis_store.delete(
+        Library,
+        nql_query={
+            {
+                "$or": [
+                    {"$nor": [{"name": {"$eq": name}} for name in unwanted_names]},
+                    {"address": {"$in": addresses}},
+                ]
+            }
+        },
+    )
+    expected = [
+        v
+        for v in inserted_libs
+        if v.address in addresses or v.name not in unwanted_names
+    ]
+    assert got == expected
+
+    # all data in database
+    got = await redis_store.find(Library)
+    expected = [
+        v
+        for v in inserted_libs
+        if v.address not in addresses and v.name in unwanted_names
+    ]
+    assert _sort_by_name(got) == _sort_by_name(expected)
+
+
+@pytest.mark.asyncio
+async def test_delete_hybrid(redis_store):
+    """Delete should delete the items that match the mongodb-like filter AND the native filter"""
+    inserted_libs, _ = await insert_test_data(
+        redis_store, library_model=Library, book_model=Book
+    )
+    unwanted_addresses = ["Stockholm, Sweden"]
+
+    # in immediate response
+    # NOTE: redis startswith/contains on single letters is not supported by redis
+    got = await redis_store.delete(
+        Library,
+        (Library.name.startswith("bu")),
+        nql_query={"address": {"$nin": unwanted_addresses}},
+    )
+    expected = [
+        v
+        for v in inserted_libs
+        if v.address not in unwanted_addresses and v.name.lower().startswith("bu")
+    ]
+    assert got == expected
+
+    # all data in database
+    got = await redis_store.find(Library)
+    expected = [
+        v
+        for v in inserted_libs
+        if v.address in unwanted_addresses or not v.name.lower().startswith("bu")
+    ]
     assert _sort_by_name(got) == _sort_by_name(expected)
 
 

@@ -205,18 +205,90 @@ async def test_update_hybrid(sql_store):
 
 
 @pytest.mark.asyncio
-async def test_delete(sql_store):
-    """Delete should remove the items that match the filter"""
+async def test_delete_native(sql_store):
+    """Delete should delete the items that match the native filter"""
     inserted_libs, _ = await insert_test_data(
         sql_store, library_model=Library, book_model=Book
     )
 
     # in immediate response
-    got = await sql_store.delete(Library, Library.id > 2)
-    expected = [v for v in inserted_libs if v.id > 2]
+    # NOTE: redis startswith/contains on single letters is not supported by redis
+    got = await sql_store.delete(Library, Library.name.startswith("bu"))
+    expected = [v for v in inserted_libs if v.name.lower().startswith("bu")]
     assert got == expected
 
-    # in database
-    got = await sql_store.find(Library, Library.id > -1)
-    expected = [v for v in inserted_libs if v.id <= 2]
+    # all data in database
+    got = await sql_store.find(Library)
+    expected = [v for v in inserted_libs if not v.name.lower().startswith("bu")]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+async def test_delete_mongo_style(sql_store):
+    """Delete should delete the items that match the mongodb-like filter"""
+    inserted_libs, _ = await insert_test_data(
+        sql_store, library_model=Library, book_model=Book
+    )
+    addresses = ["Bujumbura, Burundi", "Non existent"]
+    unwanted_names = ["Bar", "Kisaasi"]
+
+    # in immediate response
+    # NOTE: redis startswith/contains on single letters is not supported by redis
+    got = await sql_store.delete(
+        Library,
+        nql_query={
+            {
+                "$or": [
+                    {"$nor": [{"name": {"$eq": name}} for name in unwanted_names]},
+                    {"address": {"$in": addresses}},
+                ]
+            }
+        },
+    )
+    expected = [
+        v
+        for v in inserted_libs
+        if v.address in addresses or v.name not in unwanted_names
+    ]
+    assert got == expected
+
+    # all data in database
+    got = await sql_store.find(Library)
+    expected = [
+        v
+        for v in inserted_libs
+        if v.address not in addresses and v.name in unwanted_names
+    ]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+async def test_delete_hybrid(sql_store):
+    """Delete should delete the items that match the mongodb-like filter AND the native filter"""
+    inserted_libs, _ = await insert_test_data(
+        sql_store, library_model=Library, book_model=Book
+    )
+    unwanted_addresses = ["Stockholm, Sweden"]
+
+    # in immediate response
+    # NOTE: redis startswith/contains on single letters is not supported by redis
+    got = await sql_store.delete(
+        Library,
+        (Library.name.startswith("bu")),
+        nql_query={"address": {"$nin": unwanted_addresses}},
+    )
+    expected = [
+        v
+        for v in inserted_libs
+        if v.address not in unwanted_addresses and v.name.lower().startswith("bu")
+    ]
+    assert got == expected
+
+    # all data in database
+    got = await sql_store.find(Library)
+    expected = [
+        v
+        for v in inserted_libs
+        if v.address in unwanted_addresses or not v.name.lower().startswith("bu")
+    ]
     assert got == expected

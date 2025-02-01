@@ -410,6 +410,10 @@ libraries = await store.delete(
 )
 ```
 
+## TODO
+
+- [ ] Add test for each selector, testing the final output of the SQL filters, redis filters, mongo filters
+
 ## License
 
 Copyright (c) 2025 [Martin Ahindura](https://github.com/Tinitto)   
