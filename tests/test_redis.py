@@ -25,14 +25,62 @@ class Book(HashModel):
 
 
 @pytest.mark.asyncio
-async def test_find(redis_store):
-    """Update should update the items that match the filter"""
+async def test_find_native(redis_store):
+    """Find should return the items that match the native filter"""
+    inserted_libs, inserted_books = await insert_test_data(
+        redis_store, library_model=Library, book_model=Book
+    )
+    address = "Hoima, Uganda"
+
+    got = await redis_store.find(
+        Library, (Library.address == address) | (Library.name.startswith("ba")), skip=1
+    )
+    expected = [
+        v
+        for v in inserted_libs
+        if v.address == address or v.name.lower().startswith("ba")
+    ][1:]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+async def test_find_mongo_style(redis_store):
+    """Find should return the items that match the mongodb-like filter"""
     inserted_libs, inserted_books = await insert_test_data(
         redis_store, library_model=Library, book_model=Book
     )
 
-    got = await redis_store.find(Library, skip=1)
-    expected = [v for idx, v in enumerate(inserted_libs) if idx >= 1]
+    address = "Hoima, Uganda"
+
+    got = await redis_store.find(
+        Library,
+        nql_query={"$or": [{"address": {"$eq": address}}, {"name": {"$eq": "Bar"}}]},
+        skip=1,
+    )
+    expected = [v for v in inserted_libs if v.address == address or v.name == "Bar"][1:]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+async def test_find_hybrid(redis_store):
+    """Find should return the items that match the mongodb-like filter AND the native filter"""
+    inserted_libs, inserted_books = await insert_test_data(
+        redis_store, library_model=Library, book_model=Book
+    )
+
+    address = "Hoima, Uganda"
+
+    got = await redis_store.find(
+        Library,
+        (Library.name.startswith("ba")),
+        nql_query={"address": {"$eq": address}},
+        skip=1,
+    )
+    expected = [
+        v
+        for v in inserted_libs
+        if v.address == address or v.name.lower().startswith("ba")
+    ][1:]
     assert got == expected
 
 
