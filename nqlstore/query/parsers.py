@@ -328,7 +328,7 @@ class NinPredicate(OperatorPredicate):
         super().__init__(selector="$nin", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
-        return (self.parent.__sql_field__.not_in_(self.value),)
+        return (self.parent.__sql_field__.not_in(self.value),)
 
     def to_redis(self) -> tuple[_RedisFilter, ...]:
         return (self.parent.__redis_field__ >> self.value,)

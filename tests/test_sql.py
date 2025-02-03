@@ -73,7 +73,7 @@ async def test_find_hybrid(sql_store):
     expected = [
         v
         for v in inserted_libs
-        if v.address == _TEST_ADDRESS or v.name.startswith("Ba")
+        if v.address == _TEST_ADDRESS and v.name.startswith("Ba")
     ][1:]
     assert got == expected
 
@@ -88,31 +88,6 @@ async def test_create(sql_store):
 
 
 @pytest.mark.asyncio
-async def test_update(sql_store):
-    """Update should update the items that match the filter"""
-    inserted_libs, _ = await insert_test_data(
-        sql_store, library_model=Library, book_model=Book
-    )
-
-    updates = {"address": "some new address"}
-
-    # in immediate response
-    got = await sql_store.update(Library, Library.id > 2, updates=updates)
-    expected = [
-        Library(**{**v.model_dump(), **updates}) for v in inserted_libs if v.id > 2
-    ]
-    assert got == expected
-
-    # in database
-    got = await sql_store.find(Library, Library.id > -1)
-    expected = [
-        v if v.id <= 2 else Library(**{**v.model_dump(), **updates})
-        for v in inserted_libs
-    ]
-    assert got == expected
-
-
-@pytest.mark.asyncio
 async def test_update_native(sql_store):
     """Update should update the items that match the native filter"""
     inserted_libs, _ = await insert_test_data(
@@ -121,10 +96,6 @@ async def test_update_native(sql_store):
     updates = {"address": "some new address"}
     matches_query = lambda v: v.name.startswith("Bu") and v.address == _TEST_ADDRESS
 
-    expected_data_in_db = [
-        (record.model_copy(update=updates) if matches_query(record) else record)
-        for record in inserted_libs
-    ]
     # in immediate response
     # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await sql_store.update(
@@ -132,12 +103,20 @@ async def test_update_native(sql_store):
         (Library.name.startswith("Bu") & (Library.address == _TEST_ADDRESS)),
         updates=updates,
     )
-    expected = list(filter(matches_query, expected_data_in_db))
+    expected = [
+        record.model_copy(update=updates)
+        for record in inserted_libs
+        if matches_query(record)
+    ]
     assert got == expected
 
     # all library data in database
     got = await sql_store.find(Library)
-    assert got == expected_data_in_db
+    expected = [
+        (record.model_copy(update=updates) if matches_query(record) else record)
+        for record in inserted_libs
+    ]
+    assert got == expected
 
 
 @pytest.mark.asyncio
@@ -149,10 +128,6 @@ async def test_update_mongo_style(sql_store):
     updates = {"address": "some new address"}
     matches_query = lambda v: v.name != "Kisaasi" and v.address == _TEST_ADDRESS
 
-    expected_data_in_db = [
-        (record.model_copy(update=updates) if matches_query(record) else record)
-        for record in inserted_libs
-    ]
     # in immediate response
     # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await sql_store.update(
@@ -165,12 +140,21 @@ async def test_update_mongo_style(sql_store):
         },
         updates=updates,
     )
-    expected = list(filter(matches_query, expected_data_in_db))
+    expected = [
+        record.model_copy(update=updates)
+        for record in inserted_libs
+        if matches_query(record)
+    ]
+
     assert got == expected
 
     # all library data in database
     got = await sql_store.find(Library)
-    assert got == expected_data_in_db
+    expected = [
+        (record.model_copy(update=updates) if matches_query(record) else record)
+        for record in inserted_libs
+    ]
+    assert got == expected
 
 
 @pytest.mark.asyncio
@@ -182,10 +166,6 @@ async def test_update_hybrid(sql_store):
     updates = {"address": "some new address"}
     matches_query = lambda v: v.name.startswith("Bu") and v.address == _TEST_ADDRESS
 
-    expected_data_in_db = [
-        (record.model_copy(update=updates) if matches_query(record) else record)
-        for record in inserted_libs
-    ]
     # in immediate response
     # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await sql_store.update(
@@ -194,12 +174,20 @@ async def test_update_hybrid(sql_store):
         query={"address": {"$eq": _TEST_ADDRESS}},
         updates=updates,
     )
-    expected = list(filter(matches_query, expected_data_in_db))
+    expected = [
+        record.model_copy(update=updates)
+        for record in inserted_libs
+        if matches_query(record)
+    ]
     assert got == expected
 
     # all library data in database
     got = await sql_store.find(Library)
-    assert got == expected_data_in_db
+    expected = [
+        (record.model_copy(update=updates) if matches_query(record) else record)
+        for record in inserted_libs
+    ]
+    assert got == expected
 
 
 @pytest.mark.asyncio
@@ -235,12 +223,10 @@ async def test_delete_mongo_style(sql_store):
     got = await sql_store.delete(
         Library,
         query={
-            {
-                "$or": [
-                    {"$nor": [{"name": {"$eq": name}} for name in unwanted_names]},
-                    {"address": {"$in": addresses}},
-                ]
-            }
+            "$or": [
+                {"$nor": [{"name": {"$eq": name}} for name in unwanted_names]},
+                {"address": {"$in": addresses}},
+            ]
         },
     )
     expected = [
