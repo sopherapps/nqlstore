@@ -91,15 +91,15 @@ class RootPredicate(QueryPredicate):
     def __init__(
         self,
         value: QuerySelector,
-        parser: Union["QueryParser", None] = None,
+        parser: "QueryParser",
         __sql_model__: type[SQLModel] | None = None,
         __redis_model__: type[RedisModel] | None = None,
         **kwargs,
     ):
         self.__sql_model__ = __sql_model__
         self.__redis_model__ = __redis_model__
-        if parser is None:
-            parser = QueryParser()
+
+        kwargs.pop("selector", None)
         super().__init__(selector=None, value=None, parser=parser)
         self.value = self.parser._parse(value, parent=self)
 
@@ -149,6 +149,7 @@ class FieldPredicate(QueryPredicate):
         if __redis_model__:
             self.__redis_field__ = getattr(__redis_model__, selector)
 
+        kwargs.pop("selector", None)
         super().__init__(selector=selector, value=None, parser=parent.parser)
         self.value = self.parser._parse(value, parent=self)
 
@@ -176,6 +177,7 @@ class EqPredicate(OperatorPredicate):
     __slots__ = ()
 
     def __init__(self, value: Any, parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(selector="$eq", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
@@ -196,6 +198,7 @@ class GtPredicate(OperatorPredicate):
     __slots__ = ()
 
     def __init__(self, value: Any, parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(selector="$gt", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
@@ -216,6 +219,7 @@ class GtePredicate(OperatorPredicate):
     __slots__ = ()
 
     def __init__(self, value: Any, parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(selector="$gte", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
@@ -236,6 +240,7 @@ class InPredicate(OperatorPredicate):
     __slots__ = ()
 
     def __init__(self, value: list[Any], parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(selector="$in", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
@@ -256,6 +261,7 @@ class LtPredicate(OperatorPredicate):
     __slots__ = ()
 
     def __init__(self, value: Any, parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(selector="$lt", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
@@ -276,6 +282,7 @@ class LtePredicate(OperatorPredicate):
     __slots__ = ()
 
     def __init__(self, value: Any, parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(selector="$lte", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
@@ -296,6 +303,7 @@ class NePredicate(OperatorPredicate):
     __slots__ = ()
 
     def __init__(self, value: Any, parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(selector="$ne", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
@@ -316,6 +324,7 @@ class NinPredicate(OperatorPredicate):
     __slots__ = ()
 
     def __init__(self, value: list[Any], parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(selector="$nin", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
@@ -347,7 +356,8 @@ class NotPredicate(QueryPredicate):
             self.__redis_field__ = parent.__redis_field__
         self.parent = parent
 
-        super().__init__(selector="$not", value=None, **kwargs)
+        kwargs.pop("selector", None)
+        super().__init__(selector="$not", value=None, parser=parent.parser, **kwargs)
         self.value = self.parser._parse(value, parent=self)
 
     def to_mongo(self) -> _MongoFilter:
@@ -400,6 +410,7 @@ class AndPredicate(MultiLogicalPredicate):
     __slots__ = ()
 
     def __init__(self, value: list[QuerySelector], parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(selector="$and", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
@@ -426,6 +437,7 @@ class NorPredicate(MultiLogicalPredicate):
     __slots__ = ()
 
     def __init__(self, value: list[QuerySelector], parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(
             selector="$nor",
             value=value,
@@ -457,6 +469,7 @@ class OrPredicate(MultiLogicalPredicate):
     __slots__ = ()
 
     def __init__(self, value: list[QuerySelector], parent: FieldPredicate, **kwargs):
+        kwargs.pop("selector", None)
         super().__init__(
             selector="$or",
             value=value,

@@ -8,7 +8,7 @@ _TEST_ADDRESS = "Hoima, Uganda"
 
 
 class Library(HashModel):
-    address: str
+    address: str = Field(index=True, full_text_search=True)
     name: str = Field(index=True, full_text_search=True)
 
     @property
@@ -39,7 +39,7 @@ async def test_find_native(redis_store):
     )
     expected = [
         v
-        for v in inserted_libs
+        for v in _sort(inserted_libs)
         if v.address == _TEST_ADDRESS or v.name.lower().startswith("ba")
     ][1:]
     assert got == expected
@@ -48,7 +48,7 @@ async def test_find_native(redis_store):
 @pytest.mark.asyncio
 async def test_find_mongo_style(redis_store):
     """Find should return the items that match the mongodb-like filter"""
-    inserted_libs, inserted_books = await insert_test_data(
+    inserted_libs, _ = await insert_test_data(
         redis_store, library_model=Library, book_model=Book
     )
 
@@ -58,7 +58,7 @@ async def test_find_mongo_style(redis_store):
         skip=1,
     )
     expected = [
-        v for v in inserted_libs if v.address == _TEST_ADDRESS or v.name == "Bar"
+        v for v in _sort(inserted_libs) if v.address == _TEST_ADDRESS or v.name == "Bar"
     ][1:]
     assert got == expected
 
@@ -72,14 +72,14 @@ async def test_find_hybrid(redis_store):
 
     got = await redis_store.find(
         Library,
-        (Library.name.startswith("ba")),
+        (Library.name.startswith("bu")),
         query={"address": {"$eq": _TEST_ADDRESS}},
         skip=1,
     )
     expected = [
         v
-        for v in inserted_libs
-        if v.address == _TEST_ADDRESS or v.name.lower().startswith("ba")
+        for v in _sort(inserted_libs)
+        if v.address == _TEST_ADDRESS and v.name.lower().startswith("bu")
     ][1:]
     assert got == expected
 
@@ -102,10 +102,6 @@ async def test_update_native(redis_store):
     updates = {"address": "some new address"}
     matches_query = lambda v: v.name.startswith("Bu") and v.address == _TEST_ADDRESS
 
-    expected_data_in_db = [
-        (record.model_copy(update=updates) if matches_query(record) else record)
-        for record in inserted_libs
-    ]
     # in immediate response
     # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await redis_store.update(
@@ -113,12 +109,20 @@ async def test_update_native(redis_store):
         (Library.name.startswith("Bu") & (Library.address == _TEST_ADDRESS)),
         updates=updates,
     )
-    expected = list(filter(matches_query, expected_data_in_db))
+    expected = [
+        record.model_copy(update=updates)
+        for record in inserted_libs
+        if matches_query(record)
+    ]
     assert got == expected
 
     # all library data in database
     got = await redis_store.find(Library)
-    assert _sort_by_name(got) == _sort_by_name(expected_data_in_db)
+    expected = [
+        (record.model_copy(update=updates) if matches_query(record) else record)
+        for record in inserted_libs
+    ]
+    assert _sort(got) == _sort(expected)
 
 
 @pytest.mark.asyncio
@@ -130,10 +134,6 @@ async def test_update_mongo_style(redis_store):
     updates = {"address": "some new address"}
     matches_query = lambda v: v.name != "Kisaasi" and v.address == _TEST_ADDRESS
 
-    expected_data_in_db = [
-        (record.model_copy(update=updates) if matches_query(record) else record)
-        for record in inserted_libs
-    ]
     # in immediate response
     # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await redis_store.update(
@@ -146,12 +146,20 @@ async def test_update_mongo_style(redis_store):
         },
         updates=updates,
     )
-    expected = list(filter(matches_query, expected_data_in_db))
+    expected = [
+        record.model_copy(update=updates)
+        for record in inserted_libs
+        if matches_query(record)
+    ]
     assert got == expected
 
     # all library data in database
     got = await redis_store.find(Library)
-    assert _sort_by_name(got) == _sort_by_name(expected_data_in_db)
+    expected = [
+        (record.model_copy(update=updates) if matches_query(record) else record)
+        for record in inserted_libs
+    ]
+    assert _sort(got) == _sort(expected)
 
 
 @pytest.mark.asyncio
@@ -163,10 +171,6 @@ async def test_update_hybrid(redis_store):
     updates = {"address": "some new address"}
     matches_query = lambda v: v.name.startswith("Bu") and v.address == _TEST_ADDRESS
 
-    expected_data_in_db = [
-        (record.model_copy(update=updates) if matches_query(record) else record)
-        for record in inserted_libs
-    ]
     # in immediate response
     # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await redis_store.update(
@@ -175,12 +179,20 @@ async def test_update_hybrid(redis_store):
         query={"address": {"$eq": _TEST_ADDRESS}},
         updates=updates,
     )
-    expected = list(filter(matches_query, expected_data_in_db))
+    expected = [
+        record.model_copy(update=updates)
+        for record in inserted_libs
+        if matches_query(record)
+    ]
     assert got == expected
 
     # all library data in database
     got = await redis_store.find(Library)
-    assert _sort_by_name(got) == _sort_by_name(expected_data_in_db)
+    expected = [
+        (record.model_copy(update=updates) if matches_query(record) else record)
+        for record in inserted_libs
+    ]
+    assert _sort(got) == _sort(expected)
 
 
 @pytest.mark.asyncio
@@ -199,7 +211,7 @@ async def test_delete_native(redis_store):
     # all data in database
     got = await redis_store.find(Library)
     expected = [v for v in inserted_libs if not v.name.lower().startswith("bu")]
-    assert _sort_by_name(got) == _sort_by_name(expected)
+    assert _sort(got) == _sort(expected)
 
 
 @pytest.mark.asyncio
@@ -216,12 +228,10 @@ async def test_delete_mongo_style(redis_store):
     got = await redis_store.delete(
         Library,
         query={
-            {
-                "$or": [
-                    {"$nor": [{"name": {"$eq": name}} for name in unwanted_names]},
-                    {"address": {"$in": addresses}},
-                ]
-            }
+            "$or": [
+                {"$nor": [{"name": {"$eq": name}} for name in unwanted_names]},
+                {"address": {"$in": addresses}},
+            ]
         },
     )
     expected = [
@@ -229,7 +239,7 @@ async def test_delete_mongo_style(redis_store):
         for v in inserted_libs
         if v.address in addresses or v.name not in unwanted_names
     ]
-    assert got == expected
+    assert _sort(got) == _sort(expected)
 
     # all data in database
     got = await redis_store.find(Library)
@@ -238,7 +248,7 @@ async def test_delete_mongo_style(redis_store):
         for v in inserted_libs
         if v.address not in addresses and v.name in unwanted_names
     ]
-    assert _sort_by_name(got) == _sort_by_name(expected)
+    assert _sort(got) == _sort(expected)
 
 
 @pytest.mark.asyncio
@@ -261,7 +271,7 @@ async def test_delete_hybrid(redis_store):
         for v in inserted_libs
         if v.address not in unwanted_addresses and v.name.lower().startswith("bu")
     ]
-    assert got == expected
+    assert _sort(got) == _sort(expected)
 
     # all data in database
     got = await redis_store.find(Library)
@@ -270,11 +280,11 @@ async def test_delete_hybrid(redis_store):
         for v in inserted_libs
         if v.address in unwanted_addresses or not v.name.lower().startswith("bu")
     ]
-    assert _sort_by_name(got) == _sort_by_name(expected)
+    assert _sort(got) == _sort(expected)
 
 
-def _sort_by_name(libraries: list[Library]) -> list[Library]:
-    """Sorts the given libraries by name
+def _sort(libraries: list[Library]) -> list[Library]:
+    """Sorts the given libraries by address
 
     Args:
         libraries: the libraries to sort
@@ -282,4 +292,4 @@ def _sort_by_name(libraries: list[Library]) -> list[Library]:
     Returns:
         the sorted libraries
     """
-    return sorted(libraries, key=lambda v: v.name)
+    return sorted(libraries, key=lambda v: v.address)

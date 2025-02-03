@@ -21,6 +21,9 @@ class BaseStore(abc.ABC):
             parser: the query parser for parsing NQL mongodb-like queries.
             kwargs: extra key-word args to pass to the initializer
         """
+        if parser is None:
+            parser = QueryParser()
+
         self._parser = parser
         self._uri = uri
 
