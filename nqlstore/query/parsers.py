@@ -3,7 +3,7 @@
 import logging
 from abc import ABC, abstractmethod
 from functools import reduce
-from typing import Any, Iterable, Mapping, TypeVar, Union
+from typing import Any, Iterable, TypeVar, Union
 
 from aredis_om import RedisModel
 from aredis_om.model.model import Expression as RedisExpression
@@ -18,7 +18,6 @@ from sqlmodel import or_ as _sql_or
 from .selectors import OperatorSelector, QuerySelector
 
 _SQLFilter = _ColumnExpressionArgument[bool] | bool
-_MongoFilter = Mapping[str, Any] | bool
 _RedisFilter = Any | RedisExpression
 _T = TypeVar("_T")
 
@@ -37,11 +36,6 @@ class QueryPredicate(ABC):
         self.selector = selector
         self.value = value
         self.parser = parser
-
-    @abstractmethod
-    def to_mongo(self) -> _MongoFilter:
-        """Converts this predicate to filters expected by mongo db"""
-        raise NotImplementedError("MongoDB filtering not supported")
 
     @abstractmethod
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
@@ -72,9 +66,6 @@ class OperatorPredicate(QueryPredicate, ABC):
         super().__init__(selector, value, parser=parent.parser)
         self.parent = parent
 
-    def to_mongo(self) -> _MongoFilter:
-        return {self.selector: self.value}
-
 
 class RootPredicate(QueryPredicate):
     """the root predicate that is the parent of all predicates"""
@@ -102,9 +93,6 @@ class RootPredicate(QueryPredicate):
         kwargs.pop("selector", None)
         super().__init__(selector=None, value=None, parser=parser)
         self.value = self.parser._parse(value, parent=self)
-
-    def to_mongo(self) -> _MongoFilter:
-        return {v.selector: v.to_mongo() for v in self.value}
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
         parsed_values = _flatten_list([v.to_sqlalchemy() for v in self.value])
@@ -152,9 +140,6 @@ class FieldPredicate(QueryPredicate):
         kwargs.pop("selector", None)
         super().__init__(selector=selector, value=None, parser=parent.parser)
         self.value = self.parser._parse(value, parent=self)
-
-    def to_mongo(self) -> _MongoFilter:
-        return {self.selector: _merge_dicts([v.to_mongo() for v in self.value])}
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
         expressions = _flatten_list([v.to_sqlalchemy() for v in self.value])
@@ -360,10 +345,6 @@ class NotPredicate(QueryPredicate):
         super().__init__(selector="$not", value=None, parser=parent.parser, **kwargs)
         self.value = self.parser._parse(value, parent=self)
 
-    def to_mongo(self) -> _MongoFilter:
-        positive_predicate = _merge_dicts([v.to_mongo() for v in self.value])
-        return {self.parent.selector: {self.selector: positive_predicate}}
-
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
         expressions = _flatten_list([expr.to_sqlalchemy() for expr in self.value])
         return tuple([_sql_not(_sql_and(*expressions))])
@@ -391,12 +372,6 @@ class MultiLogicalPredicate(QueryPredicate, ABC):
         self.parent = parent
         super().__init__(selector=selector, value=None, parser=parent.parser, **kwargs)
         self.value = [self.parser._parse(v, parent=parent) for v in value]
-
-    def to_mongo(self) -> _MongoFilter:
-        predicates = [
-            _merge_dicts([v.to_mongo() for v in sublist]) for sublist in self.value
-        ]
-        return {self.selector: predicates}
 
 
 class AndPredicate(MultiLogicalPredicate):
@@ -511,9 +486,6 @@ class MongoOnlyPredicate(QueryPredicate):
                 setattr(self, k, v)
             except AttributeError:
                 pass
-
-    def to_mongo(self) -> _MongoFilter:
-        return {self.selector: self.value}
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
         logging.warning(f"{self.selector} might not work as expected in SQL databases")
@@ -709,18 +681,6 @@ def _flatten_list(values: Iterable[Iterable[_T]]) -> list[_T]:
         the flattened iterable
     """
     return [item for sublist in values for item in sublist]
-
-
-def _merge_dicts(values: Iterable[Mapping]) -> dict:
-    """Converts an iterable of dicts into a single dict
-
-    Args:
-        values: the list of dicts
-
-    Returns:
-        the merged dict
-    """
-    return {k: v for item in values for k, v in item.items()}
 
 
 def _redis_and(__filters: list[_RedisFilter]) -> _RedisFilter:
