@@ -410,6 +410,14 @@ libraries = await store.delete(
 )
 ```
 
+## TODO
+
+- [ ] Add a unified API for the update dicts such that things like `{"$set": {}, "$inc": {}}` etc 
+  are understood by any underlying database
+- [ ] Add regex search support for SQL (falling back to 'Like' queries in unsupported databases) and in redis
+- [ ] Add documentation site
+- [ ] Add example applications
+
 ## Contributions
 
 Contributions are welcome. The docs have to maintained, the code has to be made cleaner, more idiomatic and faster,
