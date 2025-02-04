@@ -125,9 +125,9 @@ _Migrations are outside the scope of this package_
 from nqlstore.sql import SQLStore
 from .models import Book, Library
 
-if __name__ == "__main__":
+async def main():
     store = SQLStore(uri="sqlite+aiosqlite:///database.db")
-    store.register([
+    await store.register([
         Library,
         Book,
     ])
@@ -141,9 +141,9 @@ if __name__ == "__main__":
 from nqlstore.redis import RedisStore
 from .models import Book, Library
 
-if __name__ == "__main__":
+async def main():
     store = RedisStore(uri="rediss://username:password@localhost:6379/0")
-    store.register([
+    await store.register([
         Library,
         Book,
     ])
@@ -157,12 +157,13 @@ if __name__ == "__main__":
 from nqlstore.mongo import MongoStore
 from .models import Book, Library
 
-if __name__ == "__main__":
+async def main():
     store = MongoStore(uri="mongodb://localhost:27017", database="testing")
-    store.register([
-        Library,
-        Book,
-    ])
+    await store.register([
+          Library,
+          Book,
+      ])
+    
 ```
 
 ### Use your models in your application
