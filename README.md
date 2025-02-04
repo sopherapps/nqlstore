@@ -167,16 +167,23 @@ if __name__ == "__main__":
 
 ### Use your models in your application
 
-In the rest of you application use the four class methods available on the models.
-Filtering styles native to the different database technologies are supported out of the box.
+In the rest of you application use the four class methods available on the models.  
+Filtering follows the [MongoDb-style](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
 
-- SQL filtering is the same as that of [SQLModel way of querying/filtering](https://sqlmodel.tiangolo.com/tutorial/where/#where-and-expressions-instead-of-keyword-arguments)
-- Redis filtering is the same as that of [RedisOM](https://redis.io/docs/latest/integrate/redisom-for-python/#create-read-update-and-delete-data)
-- MongoDb filtering is the same as that of [MongoDB](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
+However, for more complex queries, one can also pass in querying styles native to the type of the database,
+alongside the MongoBD-style querying. The two queries would be merged as `AND` queries.  
+
+Or one can simply ignore the MongoDB-style querying and stick to the native querying.  
+
+The available querying formats include:
+
+- SQL - [SQLModel-style](https://sqlmodel.tiangolo.com/tutorial/where/#where-and-expressions-instead-of-keyword-arguments)
+- Redis - [RedisOM-style](https://redis.io/docs/latest/integrate/redisom-for-python/#create-read-update-and-delete-data)
+- MongoDb - [MongoDB-style](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
 
 #### Insert
 
-Inserting new items in a store, call `store.insert(Type[Model], List[dict])` method.
+Inserting new items in a store, call `store.insert()` method.
 
 ```python
 new_libraries = await store.insert(Library, [{}, {}])
@@ -184,16 +191,26 @@ new_libraries = await store.insert(Library, [{}, {}])
 
 #### Find
 
-Finding items in a store, call `store.find(Type[Model], *filters: Any, skip: int=0, limit: int | None=None)` method.
+Finding items in a store, call the `store.find()` method.
 
 The key-word arguments include:
 
 - `skip (int)` - number of records to ignore at the top of the returned results; default is 0.
 - `limit (int | None)` - maximum number of records to return; default is None.
 
-The filters on the other hand are different for each type of database technology as alluded to [above](#use-your-models-in-your-application)   
+The querying format is as described [above](#use-your-models-in-your-application)   
 
-##### SQL filtering is SQLModel-style
+##### SQL
+
+###### MongoDB-style:
+
+```python
+libraries = await store.find(
+    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+)
+```
+
+###### Native-style only:
 
 ```python
 libraries = await store.find(
@@ -201,7 +218,25 @@ libraries = await store.find(
 )
 ```
 
-##### Redis filtering is RedisOM-style
+###### Hybrid
+
+```python
+libraries = await store.find(
+    Library, Library.name == "Hairora", query={"address" : {"$ne": "Buhimba"}}
+)
+```
+
+##### Redis
+
+###### MongoDB-style:
+
+```python
+libraries = await store.find(
+    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+)
+```
+
+###### Native-style only:
 
 ```python
 libraries = await store.find(
@@ -209,7 +244,15 @@ libraries = await store.find(
 )
 ```
 
-##### Mongo filtering is MongoDB-style
+###### Hybrid
+
+```python
+libraries = await store.find(
+    Library, (Library.name == "Hairora"), query={"address" : {"$ne": "Buhimba"}}
+)
+```
+
+##### Mongo
 
 ```python
 libraries = await store.find(
@@ -219,13 +262,25 @@ libraries = await store.find(
 
 #### Update
 
-Updating items in a store, call `store.update(model: Type[Model], *filters: Any, updates: dict)` method.
+Updating items in a store, call the `store.update()` method.
 
 The method returns the newly updated records.  
 The `filters` follow the same style as that used when querying as shown [above](#read).  
 Similarly, `updates` are different for each type of database technology as alluded to [earlier](#use-your-models-in-your-application).
 
 ##### SQL updates are just dictionaries of the new field values
+
+###### MongoDB-style:
+
+```python
+libraries = await store.update(
+    Library, 
+    query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}},
+    updates={"name": "Foo"},
+)
+```
+
+###### Native-style only:
 
 ```python
 libraries = await store.update(
@@ -235,7 +290,29 @@ libraries = await store.update(
 )
 ```
 
+###### Hybrid
+
+```python
+libraries = await store.update(
+    Library, 
+    Library.name == "Hairora", query={"address" : {"$ne": "Buhimba"}},
+    updates={"name": "Foo"},
+)
+```
+
 ##### Redis updates are just dictionaries of the new field values
+
+###### MongoDB-style:
+
+```python
+libraries = await store.update(
+    Library, 
+    query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}},
+    updates={"name": "Foo"},
+)
+```
+
+###### Native-style only:
 
 ```python
 libraries = await store.update(
@@ -244,6 +321,18 @@ libraries = await store.update(
     updates={"name": "Foo"},
 )
 ```
+
+###### Hybrid
+
+```python
+libraries = await store.update(
+    Library, 
+    (Library.name == "Hairora"), 
+    query={"address" : {"$ne": "Buhimba"}},
+    updates={"name": "Foo"},
+)
+```
+
 
 ##### Mongo updates are [MongoDB-style update dicts](https://www.mongodb.com/docs/manual/reference/operator/update/)
 
@@ -257,11 +346,21 @@ libraries = await store.update(
 
 #### Delete
 
-Deleting items in a store, call `store.delete(model: Type[Model], *filters: Any)` method.
+Deleting items in a store, call the `store.delete()` method.
 
 The `filters` follow the same style as that used when reading as shown [above](#read).  
 
-##### SQL filtering is SQLModel-style
+##### SQL
+
+###### MongoDB-style:
+
+```python
+libraries = await store.delete(
+    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+)
+```
+
+###### Native-style only:
 
 ```python
 libraries = await store.delete(
@@ -269,7 +368,25 @@ libraries = await store.delete(
 )
 ```
 
-##### Redis filtering is RedisOM-style
+###### Hybrid
+
+```python
+libraries = await store.delete(
+    Library, Library.name == "Hairora", query={"address" : {"$ne": "Buhimba"}}
+)
+```
+
+##### Redis
+
+###### MongoDB-style:
+
+```python
+libraries = await store.delete(
+    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+)
+```
+
+###### Native-style only:
 
 ```python
 libraries = await store.delete(
@@ -277,19 +394,21 @@ libraries = await store.delete(
 )
 ```
 
-##### Mongo filtering is MongoDB-style
+###### Hybrid
+
+```python
+libraries = await store.delete(
+    Library, (Library.name == "Hairora"), query={"address" : {"$ne": "Buhimba"}}
+)
+```
+
+##### Mongo
 
 ```python
 libraries = await store.delete(
   Library, {"name": "Hairora", "address": {"$ne": "Buhimba"}}
 )
 ```
-
-## TODO:
-
-- [ ] Create single, simpler, querying language to be used for all of them
-  - [ ] Use the Mongo DB query language as it seems very rich and very flexible
-- [ ] Abstract away the specific querying format but allow passing it if one is interested (say as an extra kwarg) 
 
 ## License
 

@@ -3,9 +3,12 @@ from os import path
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
+from sqlalchemy.sql._typing import _ColumnExpressionArgument
 
 from nqlstore._base import BaseStore
+from nqlstore.sql import SQLModel, select
 
+_SQLFilter = _ColumnExpressionArgument[bool] | bool
 _TESTS_FOLDER = path.dirname(path.abspath(__file__))
 _FIXTURES_PATH = path.join(_TESTS_FOLDER, "fixtures")
 _LibType = TypeVar("_LibType", bound=BaseModel)
@@ -33,8 +36,8 @@ async def insert_test_data(
 
     Args:
         store: the store to insert test data in
-        library_model: the model class for the Library
-        book_model: the model class for the Book
+        library_model: the model class for the RedisLibrary
+        book_model: the model class for the RedisBook
 
     Returns:
         the inserted data as a tuple of libraries, books
@@ -52,3 +55,19 @@ async def insert_test_data(
     books = await store.insert(book_model, book_data)
 
     return libraries, books
+
+
+def to_sql_text(model: type[SQLModel], queries: tuple[_SQLFilter, ...]) -> str:
+    """Converts a tuple of sql filters into their sql text
+
+    It assumes the queries are to be used in a find operation
+
+    Args:
+        model: the model to operate on
+        queries: the filters to use on the data
+
+    Returns:
+        the sql as text if this were for a find operation
+    """
+    sql = select(model).where(*queries)
+    return str(sql.compile())

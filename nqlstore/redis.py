@@ -7,6 +7,8 @@ from aredis_om.model.model import Expression, verify_pipeline_response
 from redis.client import Pipeline
 
 from nqlstore._base import BaseStore
+from nqlstore.query.parsers import QueryParser
+from nqlstore.query.selectors import QuerySelector
 
 _T = TypeVar("_T", bound=RedisModel)
 
@@ -14,8 +16,8 @@ _T = TypeVar("_T", bound=RedisModel)
 class RedisStore(BaseStore):
     """The store with data persisted in redis"""
 
-    def __init__(self, uri: str, **kwargs):
-        super().__init__(uri, **kwargs)
+    def __init__(self, uri: str, parser: QueryParser | None = None, **kwargs):
+        super().__init__(uri, parser=parser, **kwargs)
         self._db = get_redis_connection(url=uri, **kwargs)
 
     async def register(self, models: list[type[_T]], **kwargs):
@@ -42,13 +44,18 @@ class RedisStore(BaseStore):
         self,
         model: type[_T],
         *filters: Any | Expression,
+        query: QuerySelector | None = None,
         skip: int = 0,
         limit: int | None = None,
         sort: tuple[str] | None = None,
         knn: KNNExpression | None = None,
         **kwargs,
     ) -> list[_T]:
-        query = model.find(*filters, knn=knn)
+        nql_filters = ()
+        if query:
+            nql_filters = self._parser.to_redis(model, query=query)
+
+        query = model.find(*filters, *nql_filters, knn=knn)
 
         kwargs["offset"] = skip
         kwargs["limit"] = limit
@@ -61,11 +68,19 @@ class RedisStore(BaseStore):
         self,
         model: type[_T],
         *filters: Any | Expression,
-        updates: dict,
+        query: QuerySelector | None = None,
+        updates: dict | None = None,
         knn: KNNExpression | None = None,
         **kwargs,
     ) -> list[_T]:
-        query = model.find(*filters, knn=knn)
+        if updates is None:
+            updates = {}
+
+        nql_filters = ()
+        if query:
+            nql_filters = self._parser.to_redis(model, query=query)
+
+        query = model.find(*filters, *nql_filters, knn=knn)
         matched_items = await query.copy(**kwargs).all()
         updated_pks = []
         for item in matched_items:
@@ -78,11 +93,16 @@ class RedisStore(BaseStore):
         self,
         model: type[_T],
         *filters: Any | Expression,
+        query: QuerySelector | None = None,
         knn: KNNExpression | None = None,
         pipeline: Pipeline | None = None,
         **kwargs,
     ) -> list[_T]:
-        query = model.find(*filters, knn=knn)
+        nql_filters = ()
+        if query:
+            nql_filters = self._parser.to_redis(model, query=query)
+
+        query = model.find(*filters, *nql_filters, knn=knn)
         matched_items = await query.copy(**kwargs).all()
         await model.delete_many(matched_items, pipeline=pipeline)
         return matched_items
