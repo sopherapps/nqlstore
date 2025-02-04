@@ -410,6 +410,13 @@ libraries = await store.delete(
 )
 ```
 
+## Contributions
+
+Contributions are welcome. The docs have to maintained, the code has to be made cleaner, more idiomatic and faster,
+and there might be need for someone else to take over this repo in case I move on to other things. It happens!
+
+When you are ready, look at the [CONTRIBUTIONS GUIDELINES](./CONTRIBUTING.md)
+
 ## License
 
 Copyright (c) 2025 [Martin Ahindura](https://github.com/Tinitto)   
