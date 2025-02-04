@@ -42,6 +42,13 @@ all = [
     "redis-om~=0.3.3",
 ]
 
+[project.urls]
+Homepage = "https://github.com/sopherapps/nqlstore"
+Repository = "https://github.com/sopherapps/nqlstore"
+Documentation = "https://github.com/sopherapps/nqlstore"
+Issues = "https://github.com/sopherapps/nqlstore/issues"
+Changelog = "https://github.com/sopherapps/nqlstore/blob/master/CHANGELOG.md"
+
 [tool.setuptools]
 packages = ["nqlstore"]
 
