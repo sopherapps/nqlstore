@@ -40,6 +40,17 @@ async def test_find_mongo_style(redis_store, inserted_redis_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("index", range(4))
+async def test_regex_find_mongo_style(redis_store, regex_params_redis, index):
+    """Find with regex should find the items that match the regex"""
+    filters, expected = regex_params_redis[index]
+    with pytest.raises(
+        NotImplementedError, match=r"redis text search is too inexpressive for regex."
+    ):
+        await redis_store.find(RedisLibrary, query=filters)
+
+
+@pytest.mark.asyncio
 async def test_find_hybrid(redis_store, inserted_redis_libs):
     """Find should return the items that match the mongodb-like filter AND the native filter"""
     got = await redis_store.find(

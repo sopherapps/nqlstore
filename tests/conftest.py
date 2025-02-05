@@ -10,7 +10,7 @@ from nqlstore.redis import HashModel, RedisStore
 from nqlstore.sql import Field as SqlField
 from nqlstore.sql import SQLModel, SQLStore
 
-from .utils import insert_test_data
+from .utils import get_regex_test_params, insert_test_data
 
 
 class MongoLibrary(Document):
@@ -97,6 +97,12 @@ async def inserted_redis_libs(redis_store):
     yield inserted_libs
 
 
+@pytest.fixture
+def regex_params_redis(inserted_redis_libs):
+    """The regex test params for redis"""
+    yield get_regex_test_params(inserted_redis_libs)
+
+
 @pytest_asyncio.fixture()
 async def inserted_mongo_libs(mongo_store):
     """The libraries inserted in the mongodb store"""
@@ -106,6 +112,12 @@ async def inserted_mongo_libs(mongo_store):
     yield inserted_libs
 
 
+@pytest.fixture
+def regex_params_mongo(inserted_mongo_libs):
+    """The regex test params for mongo"""
+    yield get_regex_test_params(inserted_mongo_libs)
+
+
 @pytest_asyncio.fixture()
 async def inserted_sql_libs(sql_store):
     """The libraries inserted in the sql store"""
@@ -113,6 +125,12 @@ async def inserted_sql_libs(sql_store):
         sql_store, library_model=SqlLibrary, book_model=SqlBook
     )
     yield inserted_libs
+
+
+@pytest.fixture
+def regex_params_sql(inserted_sql_libs):
+    """The regex test params for sql"""
+    yield get_regex_test_params(inserted_sql_libs)
 
 
 @pytest_asyncio.fixture()

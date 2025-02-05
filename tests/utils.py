@@ -1,4 +1,5 @@
 import json
+import re
 from os import path
 from typing import Any, TypeVar
 
@@ -71,3 +72,32 @@ def to_sql_text(model: type[SQLModel], queries: tuple[_SQLFilter, ...]) -> str:
     """
     sql = select(model).where(*queries)
     return str(sql.compile())
+
+
+def get_regex_test_params(libs: list[_LibType]) -> list[tuple[dict, list[_LibType]]]:
+    """Generates the test params for the REGEX test for the given libs
+
+    Args:
+        libs: the Library records
+
+    Returns:
+        pairs of regex filter and expected output after querying
+    """
+    return [
+        (
+            {"name": {"$regex": "^bu.*", "$options": "i"}},
+            [v for v in libs if re.match(r"^bu.*", v.name, re.I)],
+        ),
+        (
+            {"name": {"$regex": "^bu.*"}},
+            [v for v in libs if re.match(r"^bu.*", v.name)],
+        ),
+        (
+            {"name": {"$regex": "am.*"}},
+            [v for v in libs if re.match(r".*am.*", v.name)],
+        ),
+        (
+            {"name": {"$regex": ".*i$"}},
+            [v for v in libs if re.match(r".*i$", v.name)],
+        ),
+    ]

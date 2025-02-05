@@ -38,6 +38,15 @@ async def test_find_mongo_style(sql_store, inserted_sql_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("index", range(4))
+async def test_regex_find_mongo_style(sql_store, regex_params_sql, index):
+    """Find with regex should find the items that match the regex"""
+    filters, expected = regex_params_sql[index]
+    got = await sql_store.find(SqlLibrary, query=filters)
+    assert got == expected
+
+
+@pytest.mark.asyncio
 async def test_find_hybrid(sql_store, inserted_sql_libs):
     """Find should return the items that match the mongodb-like filter AND the native filter"""
     got = await sql_store.find(

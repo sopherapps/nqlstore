@@ -298,6 +298,40 @@ class NePredicate(OperatorPredicate):
         return (self.parent.__redis_field__ != self.value,)
 
 
+class RegexPredicate(OperatorPredicate):
+    """field matches giv en regular expression
+
+    Format::
+
+        { "$regex": "pattern", "$options": "<options>" }
+    """
+
+    __slots__ = ("options",)
+    options: str
+    value: str
+
+    def __init__(
+        self,
+        value: str,
+        parent: FieldPredicate,
+        raw_query: QuerySelector | OperatorSelector,
+        **kwargs,
+    ):
+        kwargs.pop("selector", None)
+        self.options = raw_query.get("$options", "")
+        super().__init__(selector="$regex", value=value, parent=parent, **kwargs)
+
+    def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
+        value = self.value
+        if "sqlite" in self.parent.__sql_field__.dialect_options and self.options:
+            value = f"(?{self.options}){self.value}"
+
+        return (self.parent.__sql_field__.regexp_match(value, flags=self.options),)
+
+    def to_redis(self) -> tuple[_RedisFilter, ...]:
+        raise NotImplementedError(f"redis text search is too inexpressive for regex.")
+
+
 class NinPredicate(OperatorPredicate):
     """field is not in list of values
 
@@ -520,7 +554,7 @@ class QueryParser(dict):
         "$expr": MongoOnlyPredicate,
         "$jsonSchema": MongoOnlyPredicate,
         "$mod": MongoOnlyPredicate,  # TODO: implement this for SQL and redis
-        "$regex": MongoOnlyPredicate,  # TODO: implement this for SQL and redis, too complex
+        "$regex": RegexPredicate,
         "$text": MongoOnlyPredicate,  # TODO: implement this for SQL and redis, too complex
         "$where": MongoOnlyPredicate,
         "$geoIntersects": MongoOnlyPredicate,
@@ -565,7 +599,7 @@ class QueryParser(dict):
                 "$expr": :class:`~MongoOnlyPredicate`,
                 "$jsonSchema": :class:`~MongoOnlyPredicate`,
                 "$mod": :class:`~MongoOnlyPredicate`,
-                "$regex": :class:`~MongoOnlyPredicate`,
+                "$regex": :class:`~RegexPredicate`,
                 "$text": :class:`~MongoOnlyPredicate`,
                 "$where": :class:`~MongoOnlyPredicate`,
                 "$geoIntersects": :class:`~MongoOnlyPredicate`,
@@ -645,6 +679,7 @@ class QueryParser(dict):
             __sql_model__=getattr(parent, "__sql_model__", None),
             __redis_model__=getattr(parent, "__redis_model__", None),
             parent=parent,
+            raw_query=selector,
         )
 
         return [

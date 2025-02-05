@@ -32,6 +32,15 @@ _NeSelector = TypedDict("_NeSelector", {"$ne": Any})
 _NinSelector = TypedDict("_NinSelector", {"$nin": list[Any]})
 """field is not in list: ``{ $nin: [ <value1>, <value2> ... <valueN> ] }``"""
 
+
+_RegexSelector = TypedDict(
+    "_RegexSelector", {"$regex": str, "$options": str}, total=False
+)
+"""field matches given regular expression: ``{ "$regex": "pattern", "$options": "<options>" }``
+
+``$options`` is optional
+"""
+
 ## Element
 _ExistsSelector = TypedDict("_ExistsSelector", {"$exists": bool})
 """field exists: ``{ $exists: <boolean> }``"""
