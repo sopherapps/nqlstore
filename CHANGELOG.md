@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Add regex support for SQL
+
 ### Changed
 
 - Allow update dicts without operators in mongo update implementation
