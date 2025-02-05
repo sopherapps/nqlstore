@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Allow update dicts without operators in mongo update implementation
+
 ## [0.0.1] - 2025-02-04
 
 ### Added

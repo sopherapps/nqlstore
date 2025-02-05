@@ -28,6 +28,27 @@ async def test_create(mongo_store):
 @pytest.mark.asyncio
 async def test_update(mongo_store, inserted_mongo_libs):
     """Update should update the items that match the filter"""
+    updates = {"address": "some new address"}
+    filters = {"name": re.compile(r"^b", re.I)}
+    startswith_b = lambda v: v.name.lower().startswith("b")
+    expected_data_in_db = [
+        (record.model_copy(update=updates) if startswith_b(record) else record)
+        for record in inserted_mongo_libs
+    ]
+
+    # in immediate response
+    got = await mongo_store.update(MongoLibrary, filters, updates=updates)
+    expected = list(filter(startswith_b, expected_data_in_db))
+    assert got == expected
+
+    # all library data in database
+    got = await mongo_store.find(MongoLibrary, {})
+    assert got == expected_data_in_db
+
+
+@pytest.mark.asyncio
+async def test_update_native(mongo_store, inserted_mongo_libs):
+    """Update should update the items that match the filter with mongo-style update operators"""
     updates = {"$set": {"address": "some new address"}}
     filters = {"name": re.compile(r"^b", re.I)}
     startswith_b = lambda v: v.name.lower().startswith("b")
