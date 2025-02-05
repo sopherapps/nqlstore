@@ -1,5 +1,6 @@
 """MongoDB implementation"""
 
+import re
 from typing import Any, Iterable, Mapping, TypeVar
 
 from beanie import *
@@ -10,6 +11,7 @@ from nqlstore._base import BaseStore
 
 _T = TypeVar("_T", bound=Document)
 _Filter = Mapping[str, Any] | bool
+_UPDATE_OP_REGEX = re.compile(r"\$\w*")
 
 
 class MongoStore(BaseStore):
@@ -109,6 +111,8 @@ class MongoStore(BaseStore):
         if updates is None:
             updates = {}
 
+        mongo_updates = _to_mongo_updates(updates)
+
         cursor = model.find(
             *filters,
             session=session,
@@ -122,7 +126,7 @@ class MongoStore(BaseStore):
         )
         ids = [v.id async for v in cursor.project(_IdOnly)]
         await cursor.update(
-            updates, session=session, bulk_writer=bulk_writer, upsert=upsert
+            mongo_updates, session=session, bulk_writer=bulk_writer, upsert=upsert
         )
         return await model.find({"_id": {"$in": ids}}).to_list()
 
@@ -160,3 +164,19 @@ class _IdOnly(BaseModel):
     """Class used for projecting only id"""
 
     id: PydanticObjectId = Field(alias="_id")
+
+
+def _to_mongo_updates(updates: dict[str, Any]) -> dict[str, Any]:
+    """Converts the updates dict to a MongoLike update dict if it is not one already
+
+    Args:
+        updates: the update dict to convert
+
+    Returns:
+        the mongo update with update operators
+    """
+    for key in updates:
+        if _UPDATE_OP_REGEX.match(key):
+            return updates
+
+    return {"$set": updates}

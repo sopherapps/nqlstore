@@ -266,10 +266,11 @@ libraries = await store.find(
 Updating items in a store, call the `store.update()` method.
 
 The method returns the newly updated records.  
-The `filters` follow the same style as that used when querying as shown [above](#read).  
-Similarly, `updates` are different for each type of database technology as alluded to [earlier](#use-your-models-in-your-application).
+The `filters` follow the same style as that used when querying as shown [above](#read). 
 
-##### SQL updates are just dictionaries of the new field values
+The `updates` objects are simply dictionaries of the new field values.  
+
+##### SQL
 
 ###### MongoDB-style:
 
@@ -301,7 +302,7 @@ libraries = await store.update(
 )
 ```
 
-##### Redis updates are just dictionaries of the new field values
+##### Redis
 
 ###### MongoDB-style:
 
@@ -335,13 +336,28 @@ libraries = await store.update(
 ```
 
 
-##### Mongo updates are [MongoDB-style update dicts](https://www.mongodb.com/docs/manual/reference/operator/update/)
+##### MongoDB
 
 ```python
 libraries = await store.update(
     Library,
     {"name": "Hairora", "address": {"$ne": "Buhimba"}},
-    updates={"$set": {"name": "Foo"}},
+    updates={"name": "Foo"},
+)
+```
+
+###### Mongo Special updates (not recommended)
+
+MongoDB is special. It can also accept `updates` of the [MongoDB-style update dicts](https://www.mongodb.com/docs/manual/reference/operator/update/).
+However, this has the disadvantage of making it difficult to swap out MongoDb with another underlying technology.
+
+It is thus recommended to stick to using `updates` that are simply dictionaries of the new field values.
+
+```python
+libraries = await store.update(
+    Library,
+    {"name": "Hairora", "address": {"$ne": "Buhimba"}},
+    updates={"$set": {"name": "Foo"}}, # "$inc", "$addToSet" etc. can be accepted, but use with care
 )
 ```
 
@@ -413,9 +429,10 @@ libraries = await store.delete(
 
 ## TODO
 
-- [ ] Add a unified API for the update dicts such that things like `{"$set": {}, "$inc": {}}` etc 
-  are understood by any underlying database
+- [ ] Implement dot notation for embedded documents and arrays (i.e. relationships in SQL)
+- [ ] Add text search support for SQL and redis
 - [ ] Add regex search support for SQL (falling back to 'Like' queries in unsupported databases) and in redis
+- [ ] Add sort by field not just by entire record (accept `dict`s instead of `int` in the sort argument)
 - [ ] Add documentation site
 - [ ] Add example applications
 
