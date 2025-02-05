@@ -432,6 +432,8 @@ libraries = await store.delete(
 - [ ] Implement dot notation for embedded documents and arrays (i.e. relationships in SQL)
 - [ ] Add text search support for SQL and redis
 - [ ] Add regex search support for SQL (falling back to 'Like' queries in unsupported databases) and in redis
+- [ ] Merge all base Model and Field classes into one to allow definition of Models only once, 
+  regardless of underlying database technology
 - [ ] Add sort by field not just by entire record (accept `dict`s instead of `int` in the sort argument)
 - [ ] Add documentation site
 - [ ] Add example applications
