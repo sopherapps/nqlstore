@@ -42,78 +42,50 @@ support your favourite database technology.
 Install NQLStore from pypi, with any of the options: `sql`, `mongo`, `redis`, `all`.
 
 ```shell
-pip install nqlstore
+pip install nqlstore[all]
 ```
 
-### Swap out your object mapping (OM) package imports with nqlstore
+### Create Schemas
 
-In your python modules, define your data models as you would define them with your favourite OM package.
-**The only difference is the package you import them from.**
-
-Here are examples of OM packages to substitute.
-
-#### SQL (use [SQLModel](https://sqlmodel.tiangolo.com/) models)
+Create the basic structure of the data that will be saved in the store.  
+These schemas will later be used to create models that are specific to the underlying database
+technology.
 
 ```python
-# models.py
+# schemas.py
 
-from nqlstore.sql import Field, SQLModel 
+from typing import Generic, TypeVar
+from nqlstore import Field
+from pydantic import BaseModel
 
-class Library(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    address: str 
-    name: str 
-    
-class Book(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    title: str 
-    library_id: int = Field(default=None, foreign_key="library.id")
-```
+_ID = TypeVar("_ID")
 
-#### Redis (use [RedisOM](https://redis.io/docs/latest/integrate/redisom-for-python/) models)
 
-**Take note that JsonModel, EmbeddedJsonModel require RedisJSON, while queries require RedisSearch to be loaded**
-**You need to install [redis-stack](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/) or load the modules manually**
+class Library(BaseModel):
+    address: str = Field(index=True, full_text_search=True)
+    name: str = Field(index=True, full_text_search=True)
 
-```python
-# models.py
-from typing import List 
+    class Settings:
+        # this Settings class is optional. It is only used by Mongo models
+        # See https://beanie-odm.dev/tutorial/defining-a-document/
+        name = "libraries"
 
-from nqlstore.redis import Field, JsonModel, EmbeddedJsonModel
 
-class Book(EmbeddedJsonModel):
+class Book(BaseModel, Generic[_ID]):
+    # You can even use Generic models 
+    # See: https://docs.pydantic.dev/2.10/concepts/models/#generic-models
     title: str = Field(index=True)
-    
-class Library(JsonModel):
-    address: str 
-    name: str = Field(index=True)
-    books: List[Book]
+    library_id: _ID | None = Field(default=None, foreign_key="sqllibrary.id")
+
+    class Settings:
+        # this Settings class is optional. It is only used by Mongo models
+        # See https://beanie-odm.dev/tutorial/defining-a-document/
+        name = "books"
 ```
 
-#### Mongo (use [Beanie](https://beanie-odm.dev/))
+### Initialize your store and its models
 
-```python
-# models.py
-
-from nqlstore.mongo import Document, Indexed
-    
-class Library(Document):
-    address: str
-    name: str 
-
-
-class Book(Document):
-    title: Indexed(str) 
-    library_id: str
-```
-
-### Initialize your store
-
-Initialize the store that is to host your models.
-Similar to how you imported models from specific packages in `nqlstore`,
-import stores from the appropriately named modules in`nqlstore`.
-
-Here are examples for the different database technologies.
+Initialize the store and its models that is to host your models.
 
 #### SQL
 
@@ -122,31 +94,44 @@ _Migrations are outside the scope of this package_
 ```python
 # main.py
 
-from nqlstore.sql import SQLStore
-from .models import Book, Library
+from nqlstore import SQLStore, SQLModel
+from .schemas import Book, Library
+
+
+# Define models specific to SQL.
+SqlLibrary = SQLModel("SqlLibrary", Library)
+SqlBook = SQLModel("SqlBook", Book[int])
+
 
 async def main():
-    store = SQLStore(uri="sqlite+aiosqlite:///database.db")
-    await store.register([
-        Library,
-        Book,
-    ])
+  sql_store = SQLStore(uri="sqlite+aiosqlite:///database.db")
+  await sql_store.register([
+    SqlLibrary,
+    SqlBook,
+  ])
 ```
 
 #### Redis
 
+**Take note that JsonModel, EmbeddedJsonModel require RedisJSON, while queries require RedisSearch to be loaded**
+**You need to install [redis-stack](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/) or load the modules manually**
+
 ```python
 # main.py
 
-from nqlstore.redis import RedisStore
-from .models import Book, Library
+from nqlstore import RedisStore, HashModel
+from .schemas import Book, Library
+
+# Define models specific to redis.
+RedisLibrary = HashModel("RedisLibrary", Library)
+RedisBook = HashModel("RedisBook", Book[str])
 
 async def main():
-    store = RedisStore(uri="rediss://username:password@localhost:6379/0")
-    await store.register([
-        Library,
-        Book,
-    ])
+  redis_store = RedisStore(uri="rediss://username:password@localhost:6379/0")
+  await redis_store.register([
+    RedisLibrary,
+    RedisBook,
+  ])
 ```
 
 #### Mongo
@@ -154,16 +139,20 @@ async def main():
 ```python
 # main.py
 
-from nqlstore.mongo import MongoStore
-from .models import Book, Library
+from nqlstore import MongoStore, PydanticObjectId, MongoModel
+from .schemas import Book, Library
+
+# Define models specific to MongoDB.
+MongoLibrary = MongoModel("MongoLibrary", Library)
+MongoBook = MongoModel("MongoBook", Book[PydanticObjectId])
 
 async def main():
-    store = MongoStore(uri="mongodb://localhost:27017", database="testing")
-    await store.register([
-          Library,
-          Book,
-      ])
-    
+  mongo_store = MongoStore(uri="mongodb://localhost:27017", database="testing")
+  await mongo_store.register([
+    MongoLibrary,
+    MongoBook,
+  ])
+
 ```
 
 ### Use your models in your application
@@ -171,23 +160,25 @@ async def main():
 In the rest of you application use the four class methods available on the models.  
 Filtering follows the [MongoDb-style](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
 
-However, for more complex queries, one can also pass in querying styles native to the type of the database,
-alongside the MongoBD-style querying. The two queries would be merged as `AND` queries.  
-
-Or one can simply ignore the MongoDB-style querying and stick to the native querying.  
-
-The available querying formats include:
-
-- SQL - [SQLModel-style](https://sqlmodel.tiangolo.com/tutorial/where/#where-and-expressions-instead-of-keyword-arguments)
-- Redis - [RedisOM-style](https://redis.io/docs/latest/integrate/redisom-for-python/#create-read-update-and-delete-data)
-- MongoDb - [MongoDB-style](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
+> **Note**: For more complex queries, one can also pass in querying styles native to the type of the database,  
+> alongside the MongoBD-style querying. The two queries would be merged as `AND` queries.  
+>
+> Or one can simply ignore the MongoDB-style querying and stick to the native querying.  
+> 
+> The available querying formats include:
+> 
+> - SQL - [SQLModel-style](https://sqlmodel.tiangolo.com/tutorial/where/#where-and-expressions-instead-of-keyword-arguments)
+> - Redis - [RedisOM-style](https://redis.io/docs/latest/integrate/redisom-for-python/#create-read-update-and-delete-data)
+> - MongoDb - [MongoDB-style](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
 
 #### Insert
 
 Inserting new items in a store, call `store.insert()` method.
 
 ```python
-new_libraries = await store.insert(Library, [{}, {}])
+new_libraries = await sql_store.insert(SqlLibrary, [{}, {}])
+new_libraries = await mongo_store.insert(MongoLibrary, [{}, {}])
+new_libraries = await redis_store.insert(RedisLibrary, [{}, {}])
 ```
 
 #### Find
@@ -199,65 +190,36 @@ The key-word arguments include:
 - `skip (int)` - number of records to ignore at the top of the returned results; default is 0.
 - `limit (int | None)` - maximum number of records to return; default is None.
 
-The querying format is as described [above](#use-your-models-in-your-application)   
-
-##### SQL
-
-###### MongoDB-style:
+The querying format is as described [above](#use-your-models-in-your-application)
 
 ```python
-libraries = await store.find(
-    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+# MongoDB-style: works with any underlying database technology
+libraries = await sql_store.find(
+    SqlLibrary, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
 )
-```
 
-###### Native-style only:
 
-```python
-libraries = await store.find(
-    Library, Library.name == "Hairora", Library.address != "Buhimba"
+# Native SQL-style: works only if underlying database is SQL database
+libraries = await sql_store.find(
+    SqlLibrary, SqlLibrary.name == "Hairora", SqlLibrary.address != "Buhimba"
 )
-```
 
-###### Hybrid
 
-```python
-libraries = await store.find(
-    Library, Library.name == "Hairora", query={"address" : {"$ne": "Buhimba"}}
+# Hybrid SQL-Mongo-style: works only if underlying database is SQL database
+libraries = await sql_store.find(
+    SqlLibrary, SqlLibrary.name == "Hairora", query={"address" : {"$ne": "Buhimba"}}
 )
-```
 
-##### Redis
 
-###### MongoDB-style:
-
-```python
-libraries = await store.find(
-    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+# Native Redis-style: works only if underlying database is redis database
+libraries = await redis_store.find(
+    RedisLibrary, (RedisLibrary.name == "Hairora") & (RedisLibrary.address != "Buhimba")
 )
-```
 
-###### Native-style only:
 
-```python
-libraries = await store.find(
-    Library, (Library.name == "Hairora") & (Library.address != "Buhimba")
-)
-```
-
-###### Hybrid
-
-```python
-libraries = await store.find(
-    Library, (Library.name == "Hairora"), query={"address" : {"$ne": "Buhimba"}}
-)
-```
-
-##### Mongo
-
-```python
-libraries = await store.find(
-    Library, {"name": "Hairora", "address": {"$ne": "Buhimba"}}
+# Hybrid redis-mongo-style: works only if underlying database is redis database
+libraries = await redis_store.find(
+    RedisLibrary, (RedisLibrary.name == "Hairora"), query={"address" : {"$ne": "Buhimba"}}
 )
 ```
 
@@ -272,166 +234,106 @@ The `updates` objects are simply dictionaries of the new field values.
 
 ##### SQL
 
-###### MongoDB-style:
-
 ```python
-libraries = await store.update(
-    Library, 
+# Mongo-style of filtering: works with any underlying database technology
+libraries = await redis_store.update(
+    RedisLibrary, 
     query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}},
     updates={"name": "Foo"},
 )
-```
 
-###### Native-style only:
 
-```python
-libraries = await store.update(
-    Library, 
-    Library.name == "Hairora", Library.address != "Buhimba", 
+# Native SQL-style filtering: works only if the underlying database is SQL
+libraries = await sql_store.update(
+    SqlLibrary, 
+    SqlLibrary.name == "Hairora", SqlLibrary.address != "Buhimba", 
     updates={"name": "Foo"},
 )
-```
 
-###### Hybrid
 
-```python
-libraries = await store.update(
-    Library, 
-    Library.name == "Hairora", query={"address" : {"$ne": "Buhimba"}},
+# Hybrid SQL-mongo-style filtering: works only if the underlying database is SQL
+libraries = await sql_store.update(
+    SqlLibrary, 
+    SqlLibrary.name == "Hairora", query={"address" : {"$ne": "Buhimba"}},
     updates={"name": "Foo"},
 )
-```
 
-##### Redis
 
-###### MongoDB-style:
-
-```python
-libraries = await store.update(
-    Library, 
-    query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}},
+# Native redisOM-style filtering: works only if the underlying database is redis
+libraries = await redis_store.update(
+    RedisLibrary, 
+    (RedisLibrary.name == "Hairora") & (RedisLibrary.address != "Buhimba"), 
     updates={"name": "Foo"},
 )
-```
 
-###### Native-style only:
 
-```python
-libraries = await store.update(
-    Library, 
-    (Library.name == "Hairora") & (Library.address != "Buhimba"), 
-    updates={"name": "Foo"},
-)
-```
-
-###### Hybrid
-
-```python
-libraries = await store.update(
-    Library, 
-    (Library.name == "Hairora"), 
+# Hybrid redis-mongo-style filtering: works only if the underlying database is redis
+libraries = await redis_store.update(
+    RedisLibrary, 
+    (RedisLibrary.name == "Hairora"), 
     query={"address" : {"$ne": "Buhimba"}},
     updates={"name": "Foo"},
 )
-```
 
 
-##### MongoDB
-
-```python
-libraries = await store.update(
-    Library,
-    {"name": "Hairora", "address": {"$ne": "Buhimba"}},
-    updates={"name": "Foo"},
-)
-```
-
-###### Mongo Special updates (not recommended)
-
-MongoDB is special. It can also accept `updates` of the [MongoDB-style update dicts](https://www.mongodb.com/docs/manual/reference/operator/update/).
-However, this has the disadvantage of making it difficult to swap out MongoDb with another underlying technology.
-
-It is thus recommended to stick to using `updates` that are simply dictionaries of the new field values.
-
-```python
-libraries = await store.update(
-    Library,
+# MongoDB is special. It can also accept `updates` of the MongoDB-style update dicts
+# See <https://www.mongodb.com/docs/manual/reference/operator/update/>.
+# However, this has the disadvantage of making it difficult to swap out MongoDb 
+# with another underlying technology.
+#
+# It is thus recommended to stick to using `updates` that are simply 
+# dictionaries of the new field values.
+# 
+# The MongoDB-style update dicts work only if the underlying database is mongodb
+libraries = await mongo_store.update(
+    MongoLibrary,
     {"name": "Hairora", "address": {"$ne": "Buhimba"}},
     updates={"$set": {"name": "Foo"}}, # "$inc", "$addToSet" etc. can be accepted, but use with care
 )
+
 ```
+
 
 #### Delete
 
 Deleting items in a store, call the `store.delete()` method.
 
-The `filters` follow the same style as that used when reading as shown [above](#read).  
-
-##### SQL
-
-###### MongoDB-style:
+The `filters` follow the same style as that used when reading as shown [above](#read).
 
 ```python
-libraries = await store.delete(
-    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+# Mongo-style of filtering: works with any underlying database technology
+libraries = await mongo_store.delete(
+    MongoLibrary, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
 )
-```
 
-###### Native-style only:
 
-```python
-libraries = await store.delete(
-    Library, Library.name == "Hairora", Library.address != "Buhimba"
+# Native SQL-style filtering: works only if the underlying database is SQL
+libraries = await sql_store.delete(
+    SqlLibrary, SqlLibrary.name == "Hairora", SqlLibrary.address != "Buhimba"
 )
-```
 
-###### Hybrid
 
-```python
-libraries = await store.delete(
-    Library, Library.name == "Hairora", query={"address" : {"$ne": "Buhimba"}}
+# Hybrid SQL-mongo-style filtering: works only if the underlying database is SQL
+libraries = await sql_store.delete(
+    SqlLibrary, SqlLibrary.name == "Hairora", query={"address" : {"$ne": "Buhimba"}}
 )
-```
 
-##### Redis
 
-###### MongoDB-style:
-
-```python
-libraries = await store.delete(
-    Library, query={"name": {"$eq": "Hairora"}, "address" : {"$ne": "Buhimba"}}
+# Native redisOM-style filtering: works only if the underlying database is redis
+libraries = await redis_store.delete(
+    RedisLibrary, (RedisLibrary.name == "Hairora") & (RedisLibrary.address != "Buhimba")
 )
-```
 
-###### Native-style only:
 
-```python
-libraries = await store.delete(
-    Library, (Library.name == "Hairora") & (Library.address != "Buhimba")
-)
-```
-
-###### Hybrid
-
-```python
-libraries = await store.delete(
-    Library, (Library.name == "Hairora"), query={"address" : {"$ne": "Buhimba"}}
-)
-```
-
-##### Mongo
-
-```python
-libraries = await store.delete(
-  Library, {"name": "Hairora", "address": {"$ne": "Buhimba"}}
+# Hybrid redis-mongo-style filtering: works only if the underlying database is redis
+libraries = await redis_store.delete(
+    RedisLibrary, (RedisLibrary.name == "Hairora"), query={"address" : {"$ne": "Buhimba"}}
 )
 ```
 
 ## TODO
 
 - [ ] Implement dot notation for embedded documents and arrays (i.e. relationships in SQL)
-- [ ] Merge all base Model and Field classes into one to allow definition of Models only once, 
-  regardless of underlying database technology
 - [ ] Add sort by field not just by entire record (accept `dict`s instead of `int` in the sort argument)
 - [ ] Add documentation site
 - [ ] Add example applications
@@ -450,11 +352,14 @@ Licensed under the [MIT License](./LICENSE)
 
 ## Gratitude
 
+Thanks goes to the names of the people in the [CREDITS.md](./CREDITS.md), for the efforts
+they have put into this project.  
+
+But above all, glory be to God.
+
 > "In that day you will ask in My name. I am not saying that I will ask the Father on your behalf.
 > No, the Father himself loves you because you have loved Me and have believed that I came from God."
 >
 > -- John 16: 26-27
-
-All glory be to God
 
 <a href="https://www.buymeacoffee.com/martinahinJ" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>

@@ -5,7 +5,9 @@ from typing import Any, Iterable, Mapping, TypeVar
 
 from beanie import *
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorClientSession
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from pydantic import Field as _Field
+from pydantic.main import ModelT, create_model
 
 from nqlstore._base import BaseStore
 
@@ -160,10 +162,39 @@ class MongoStore(BaseStore):
         return deleted_items
 
 
+def MongoModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+    """Creates a new Mongo Model for the given schema
+
+    A new model can be defined by::
+
+        Model = MongoModel("Model", Schema)
+
+    Args:
+        name: the name of the model
+        schema: the schema from which the model is to be made
+
+    Returns:
+        a Mongo model class with the given name
+    """
+    return create_model(
+        name,
+        __doc__=schema.__doc__,
+        __slots__=schema.__slots__,
+        __base__=(
+            Document,
+            schema,
+        ),
+        **{
+            field_name: (field.annotation, field)
+            for field_name, field in schema.model_fields.items()
+        },
+    )
+
+
 class _IdOnly(BaseModel):
     """Class used for projecting only id"""
 
-    id: PydanticObjectId = Field(alias="_id")
+    id: PydanticObjectId = _Field(alias="_id")
 
 
 def _to_mongo_updates(updates: dict[str, Any]) -> dict[str, Any]:

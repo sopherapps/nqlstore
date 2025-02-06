@@ -3,11 +3,12 @@ import re
 from os import path
 from typing import Any, TypeVar
 
+from beanie import PydanticObjectId
 from pydantic import BaseModel
 from sqlalchemy.sql._typing import _ColumnExpressionArgument
 
 from nqlstore._base import BaseStore
-from nqlstore.sql import SQLModel, select
+from nqlstore._sql import SQLModel, select
 
 _SQLFilter = _ColumnExpressionArgument[bool] | bool
 _TESTS_FOLDER = path.dirname(path.abspath(__file__))
@@ -50,12 +51,27 @@ async def insert_test_data(
     libraries = await store.insert(library_model, library_data)
 
     book_data = [
-        book_model(library_id=libraries[idx % 2].id, **data)
+        book_model(library_id=_get_id(libraries[idx % 2]), **data)
         for idx, data in enumerate(book_data)
     ]
     books = await store.insert(book_model, book_data)
 
     return libraries, books
+
+
+def _get_id(lib: _LibType) -> PydanticObjectId | int | str:
+    """Gets the id of the lib
+
+    Args:
+        lib: the library to extract the id from
+
+    Returns:
+        the id or pk
+    """
+    try:
+        return lib.id
+    except AttributeError:
+        return lib.pk
 
 
 def to_sql_text(model: type[SQLModel], queries: tuple[_SQLFilter, ...]) -> str:

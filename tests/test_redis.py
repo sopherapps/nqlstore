@@ -1,7 +1,7 @@
 import pytest
 
 from tests.conftest import RedisBook, RedisLibrary
-from tests.utils import insert_test_data, load_fixture
+from tests.utils import load_fixture
 
 _LIBRARY_DATA = load_fixture("libraries.json")
 _TEST_ADDRESS = "Hoima, Uganda"
