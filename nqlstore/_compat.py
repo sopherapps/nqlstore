@@ -13,10 +13,12 @@ try:
     from aredis_om import RedisModel as _RedisModel
     from aredis_om import get_redis_connection
     from aredis_om.model.model import Expression
+    from aredis_om.model.model import Field as _RedisField
     from aredis_om.model.model import FieldInfo as _RedisFieldInfo
     from aredis_om.model.model import VectorFieldOptions, verify_pipeline_response
     from redis.client import Pipeline
 except ImportError:
+    from pydantic.fields import Field as _RedisField
     from pydantic.fields import FieldInfo as _RedisFieldInfo
     from pydantic.main import BaseModel
 
@@ -47,6 +49,7 @@ try:
     from sqlmodel._compat import post_init_field_info
     from sqlmodel.ext.asyncio.session import AsyncSession
     from sqlmodel.main import Column
+    from sqlmodel.main import Field as _SQLField
     from sqlmodel.main import FieldInfo as _SqlFieldInfo
     from sqlmodel.main import NoArgAnyCallable, OnDeleteType, Relationship
 except ImportError:
@@ -55,6 +58,7 @@ except ImportError:
 
     from pydantic import BaseModel as _SQLModel
     from pydantic.fields import Field as Relationship
+    from pydantic.fields import Field as _SQLField
     from pydantic.fields import FieldInfo as _FieldInfo
 
     class _SqlFieldInfo(_FieldInfo): ...

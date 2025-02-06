@@ -5,33 +5,18 @@ from abc import ABC, abstractmethod
 from functools import reduce
 from typing import Any, Iterable, TypeVar, Union
 
+from .._compat import Expression as _RedisExpression
+from .._compat import (
+    _ColumnExpressionArgument,
+    _RedisField,
+    _RedisModel,
+    _SQLField,
+    _SQLModel,
+)
 from .selectors import OperatorSelector, QuerySelector
 
-# redis imports
-try:
-    from aredis_om.model.model import Expression as RedisExpression
-    from aredis_om.model.model import Field as _RedisField
-    from aredis_om.model.model import RedisModel
-except ImportError:
-    from pydantic import BaseModel as RedisModel
-    from pydantic.fields import Field as _RedisField
-
-    RedisExpression = Any
-
-# sql imports
-try:
-    from sqlalchemy.sql._typing import _ColumnExpressionArgument
-    from sqlmodel import Field as _SQLField
-    from sqlmodel import SQLModel
-except ImportError:
-    from typing import Set as _ColumnExpressionArgument
-
-    from pydantic import BaseModel as SQLModel
-    from pydantic.fields import Field as _SQLField
-
-
 _SQLFilter = _ColumnExpressionArgument[bool] | bool
-_RedisFilter = Any | "RedisExpression"
+_RedisFilter = Any | _RedisExpression
 _T = TypeVar("_T")
 
 
@@ -89,15 +74,15 @@ class RootPredicate(QueryPredicate):
     )
     value: list[QueryPredicate]
     selector: None
-    __sql_model__: type["SQLModel"]
-    __redis_model__: type["RedisModel"]
+    __sql_model__: type[_SQLModel]
+    __redis_model__: type[_RedisModel]
 
     def __init__(
         self,
         value: QuerySelector,
         parser: "QueryParser",
-        __sql_model__: type["SQLModel"] | None = None,
-        __redis_model__: type["RedisModel"] | None = None,
+        __sql_model__: type[_SQLModel] | None = None,
+        __redis_model__: type[_RedisModel] | None = None,
         **kwargs,
     ):
         self.__sql_model__ = __sql_model__
@@ -131,8 +116,8 @@ class FieldPredicate(QueryPredicate):
     )
     value: list[OperatorPredicate]
     selector: str
-    __sql_field__: "_SQLField"
-    __redis_field__: "_RedisField"
+    __sql_field__: _SQLField
+    __redis_field__: _RedisField
     parent: QueryPredicate
 
     def __init__(
@@ -140,8 +125,8 @@ class FieldPredicate(QueryPredicate):
         selector: str,
         value: OperatorSelector,
         parent: QueryPredicate,
-        __sql_model__: type["SQLModel"] | None = None,
-        __redis_model__: type["RedisModel"] | None = None,
+        __sql_model__: type[_SQLModel] | None = None,
+        __redis_model__: type[_RedisModel] | None = None,
         **kwargs,
     ):
         if __sql_model__:
@@ -379,8 +364,8 @@ class NotPredicate(QueryPredicate):
     __slots__ = ("__sql_field__", "__redis_field__", "parent")
     value: list[OperatorPredicate]
     selector: str
-    __sql_field__: "_SQLField"
-    __redis_field__: "_RedisField"
+    __sql_field__: _SQLField
+    __redis_field__: _RedisField
     parent: FieldPredicate
 
     def __init__(self, value: OperatorSelector, parent: FieldPredicate, **kwargs):
@@ -654,7 +639,7 @@ class QueryParser(dict):
         super().__init__()
 
     def to_redis(
-        self, model: type["RedisModel"], query: QuerySelector
+        self, model: type[_RedisModel], query: QuerySelector
     ) -> tuple[_SQLFilter, ...]:
         """Converts the mongodb-like NQL query to redis specific filters
 
@@ -669,7 +654,7 @@ class QueryParser(dict):
         return root.to_redis()
 
     def to_sql(
-        self, model: type["SQLModel"], query: QuerySelector
+        self, model: type[_SQLModel], query: QuerySelector
     ) -> tuple[_SQLFilter, ...]:
         """Converts the mongodb-like NQL query to SQL specific filters
 
