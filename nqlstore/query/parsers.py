@@ -5,20 +5,18 @@ from abc import ABC, abstractmethod
 from functools import reduce
 from typing import Any, Iterable, TypeVar, Union
 
-from aredis_om import RedisModel
-from aredis_om.model.model import Expression as RedisExpression
-from aredis_om.model.model import Field as _RedisField
-from sqlalchemy.sql._typing import _ColumnExpressionArgument
-from sqlmodel import Field as _SQLField
-from sqlmodel import SQLModel
-from sqlmodel import and_ as _sql_and
-from sqlmodel import not_ as _sql_not
-from sqlmodel import or_ as _sql_or
-
+from .._compat import Expression as _RedisExpression
+from .._compat import (
+    _ColumnExpressionArgument,
+    _RedisField,
+    _RedisModel,
+    _SQLField,
+    _SQLModel,
+)
 from .selectors import OperatorSelector, QuerySelector
 
 _SQLFilter = _ColumnExpressionArgument[bool] | bool
-_RedisFilter = Any | RedisExpression
+_RedisFilter = Any | _RedisExpression
 _T = TypeVar("_T")
 
 
@@ -76,15 +74,15 @@ class RootPredicate(QueryPredicate):
     )
     value: list[QueryPredicate]
     selector: None
-    __sql_model__: type[SQLModel]
-    __redis_model__: type[RedisModel]
+    __sql_model__: type[_SQLModel]
+    __redis_model__: type[_RedisModel]
 
     def __init__(
         self,
         value: QuerySelector,
         parser: "QueryParser",
-        __sql_model__: type[SQLModel] | None = None,
-        __redis_model__: type[RedisModel] | None = None,
+        __sql_model__: type[_SQLModel] | None = None,
+        __redis_model__: type[_RedisModel] | None = None,
         **kwargs,
     ):
         self.__sql_model__ = __sql_model__
@@ -127,8 +125,8 @@ class FieldPredicate(QueryPredicate):
         selector: str,
         value: OperatorSelector,
         parent: QueryPredicate,
-        __sql_model__: type[SQLModel] | None = None,
-        __redis_model__: type[RedisModel] | None = None,
+        __sql_model__: type[_SQLModel] | None = None,
+        __redis_model__: type[_RedisModel] | None = None,
         **kwargs,
     ):
         if __sql_model__:
@@ -142,8 +140,10 @@ class FieldPredicate(QueryPredicate):
         self.value = self.parser._parse(value, parent=self)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
+        from sqlmodel import and_
+
         expressions = _flatten_list([v.to_sqlalchemy() for v in self.value])
-        return tuple([_sql_and(*expressions)])
+        return tuple([and_(*expressions)])
 
     def to_redis(self) -> tuple[_RedisFilter, ...]:
         expressions = _flatten_list([v.to_redis() for v in self.value])
@@ -380,8 +380,10 @@ class NotPredicate(QueryPredicate):
         self.value = self.parser._parse(value, parent=self)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
+        from sqlmodel import and_, not_
+
         expressions = _flatten_list([expr.to_sqlalchemy() for expr in self.value])
-        return tuple([_sql_not(_sql_and(*expressions))])
+        return tuple([not_(and_(*expressions))])
 
     def to_redis(self) -> tuple[_RedisFilter, ...]:
         expressions = _flatten_list([expr.to_redis() for expr in self.value])
@@ -423,10 +425,12 @@ class AndPredicate(MultiLogicalPredicate):
         super().__init__(selector="$and", value=value, parent=parent, **kwargs)
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
+        from sqlmodel import and_
+
         expressions = _flatten_list(
             [expr.to_sqlalchemy() for sublist in self.value for expr in sublist]
         )
-        return tuple([_sql_and(*expressions)])
+        return tuple([and_(*expressions)])
 
     def to_redis(self) -> tuple[_RedisFilter, ...]:
         expressions = _flatten_list(
@@ -455,10 +459,12 @@ class NorPredicate(MultiLogicalPredicate):
         )
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
+        from sqlmodel import not_, or_
+
         expressions = _flatten_list(
             [expr.to_sqlalchemy() for sublist in self.value for expr in sublist]
         )
-        return tuple([_sql_not(_sql_or(*expressions))])
+        return tuple([not_(or_(*expressions))])
 
     def to_redis(self) -> tuple[_RedisFilter, ...]:
         expressions = _flatten_list(
@@ -487,10 +493,12 @@ class OrPredicate(MultiLogicalPredicate):
         )
 
     def to_sqlalchemy(self) -> tuple[_SQLFilter, ...]:
+        from sqlmodel import or_
+
         expressions = _flatten_list(
             [expr.to_sqlalchemy() for sublist in self.value for expr in sublist]
         )
-        return tuple([_sql_or(*expressions)])
+        return tuple([or_(*expressions)])
 
     def to_redis(self) -> tuple[_RedisFilter, ...]:
         expressions = _flatten_list(
@@ -631,7 +639,7 @@ class QueryParser(dict):
         super().__init__()
 
     def to_redis(
-        self, model: type[RedisModel], query: QuerySelector
+        self, model: type[_RedisModel], query: QuerySelector
     ) -> tuple[_SQLFilter, ...]:
         """Converts the mongodb-like NQL query to redis specific filters
 
@@ -646,7 +654,7 @@ class QueryParser(dict):
         return root.to_redis()
 
     def to_sql(
-        self, model: type[SQLModel], query: QuerySelector
+        self, model: type[_SQLModel], query: QuerySelector
     ) -> tuple[_SQLFilter, ...]:
         """Converts the mongodb-like NQL query to SQL specific filters
 

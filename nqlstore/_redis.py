@@ -2,19 +2,23 @@
 
 from typing import Any, Callable, Iterable, TypeVar
 
-from aredis_om import EmbeddedJsonModel as _EmbeddedJsonModel
-from aredis_om import HashModel as _HashModel
-from aredis_om import JsonModel as _JsonModel
-from aredis_om import KNNExpression, Migrator
-from aredis_om import RedisModel as _RedisModel
-from aredis_om import get_redis_connection
-from aredis_om.model.model import Expression, verify_pipeline_response
 from pydantic.main import ModelT, create_model
-from redis.client import Pipeline
 
-from nqlstore._base import BaseStore
-from nqlstore.query.parsers import QueryParser
-from nqlstore.query.selectors import QuerySelector
+from ._base import BaseStore
+from ._compat import (
+    Expression,
+    KNNExpression,
+    Migrator,
+    Pipeline,
+    _EmbeddedJsonModel,
+    _HashModel,
+    _JsonModel,
+    _RedisModel,
+    get_redis_connection,
+    verify_pipeline_response,
+)
+from .query.parsers import QueryParser
+from .query.selectors import QuerySelector
 
 _T = TypeVar("_T", bound=_RedisModel)
 
@@ -114,7 +118,7 @@ class RedisStore(BaseStore):
         return matched_items
 
 
-def HashModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+def HashModel(name: str, schema: type[ModelT], /) -> type[_HashModel]:
     """Creates a new HashModel for the given schema for redis
 
     A new model can be defined by::
@@ -144,7 +148,7 @@ def HashModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
     )
 
 
-def JsonModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+def JsonModel(name: str, schema: type[ModelT], /) -> type[_JsonModel]:
     """Creates a new JsonModel for the given schema for redis
 
     A new model can be defined by::
@@ -174,7 +178,7 @@ def JsonModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
     )
 
 
-def EmbeddedJsonModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+def EmbeddedJsonModel(name: str, schema: type[ModelT], /) -> type[_EmbeddedJsonModel]:
     """Creates a new EmbeddedJsonModel for the given schema for redis
 
     A new model can be defined by::

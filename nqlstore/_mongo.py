@@ -3,13 +3,21 @@
 import re
 from typing import Any, Iterable, Mapping, TypeVar
 
-from beanie import *
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorClientSession
 from pydantic import BaseModel
 from pydantic import Field as _Field
 from pydantic.main import ModelT, create_model
 
-from nqlstore._base import BaseStore
+from ._base import BaseStore
+from ._compat import (
+    AsyncIOMotorClient,
+    AsyncIOMotorClientSession,
+    BulkWriter,
+    Document,
+    PydanticObjectId,
+    SortDirection,
+    WriteRules,
+    init_beanie,
+)
 
 _T = TypeVar("_T", bound=Document)
 _Filter = Mapping[str, Any] | bool
@@ -162,7 +170,7 @@ class MongoStore(BaseStore):
         return deleted_items
 
 
-def MongoModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+def MongoModel(name: str, schema: type[ModelT], /) -> type[Document]:
     """Creates a new Mongo Model for the given schema
 
     A new model can be defined by::

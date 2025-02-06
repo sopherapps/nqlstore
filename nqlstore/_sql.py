@@ -4,16 +4,19 @@ from typing import Any, Iterable, TypeVar
 
 from pydantic import create_model
 from pydantic.main import ModelT
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.sql._typing import (
-    _ColumnExpressionArgument,
-    _ColumnExpressionOrStrLabelArgument,
-)
-from sqlmodel import SQLModel as _SQLModel
-from sqlmodel import delete, insert, select, update
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ._base import BaseStore
+from ._compat import (
+    AsyncSession,
+    _ColumnExpressionArgument,
+    _ColumnExpressionOrStrLabelArgument,
+    _SQLModel,
+    create_async_engine,
+    delete,
+    insert,
+    select,
+    update,
+)
 from ._field import Field
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
@@ -122,7 +125,7 @@ class _SQLModelMeta(_SQLModel):
     id: int | None = Field(default=None, primary_key=True)
 
 
-def SQLModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+def SQLModel(name: str, schema: type[ModelT], /) -> type[_SQLModel]:
     """Creates a new SQLModel for the given schema for redis
 
     A new model can be defined by::

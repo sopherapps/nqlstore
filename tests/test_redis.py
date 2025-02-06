@@ -1,13 +1,14 @@
 import pytest
 
 from tests.conftest import RedisBook, RedisLibrary
-from tests.utils import load_fixture
+from tests.utils import is_lib_installed, load_fixture
 
 _LIBRARY_DATA = load_fixture("libraries.json")
 _TEST_ADDRESS = "Hoima, Uganda"
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_find_native(redis_store, inserted_redis_libs):
     """Find should return the items that match the native filter"""
     got = await redis_store.find(
@@ -24,6 +25,7 @@ async def test_find_native(redis_store, inserted_redis_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_find_mongo_style(redis_store, inserted_redis_libs):
     """Find should return the items that match the mongodb-like filter"""
     got = await redis_store.find(
@@ -40,6 +42,7 @@ async def test_find_mongo_style(redis_store, inserted_redis_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 @pytest.mark.parametrize("index", range(4))
 async def test_regex_find_mongo_style(redis_store, regex_params_redis, index):
     """Find with regex should find the items that match the regex"""
@@ -51,6 +54,7 @@ async def test_regex_find_mongo_style(redis_store, regex_params_redis, index):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_find_hybrid(redis_store, inserted_redis_libs):
     """Find should return the items that match the mongodb-like filter AND the native filter"""
     got = await redis_store.find(
@@ -68,6 +72,7 @@ async def test_find_hybrid(redis_store, inserted_redis_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_create(redis_store):
     """Create should add many items to the sql database"""
     await redis_store.register([RedisLibrary, RedisBook])
@@ -77,6 +82,7 @@ async def test_create(redis_store):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_update_native(redis_store, inserted_redis_libs):
     """Update should update the items that match the native filter"""
     updates = {"address": "some new address"}
@@ -106,6 +112,7 @@ async def test_update_native(redis_store, inserted_redis_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_update_mongo_style(redis_store, inserted_redis_libs):
     """Update should update the items that match the mongodb-like filter"""
     updates = {"address": "some new address"}
@@ -140,6 +147,7 @@ async def test_update_mongo_style(redis_store, inserted_redis_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_update_hybrid(redis_store, inserted_redis_libs):
     """Update should update the items that match the mongodb-like filter AND the native filter"""
     updates = {"address": "some new address"}
@@ -170,6 +178,7 @@ async def test_update_hybrid(redis_store, inserted_redis_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_delete_native(redis_store, inserted_redis_libs):
     """Delete should delete the items that match the native filter"""
     # in immediate response
@@ -185,6 +194,7 @@ async def test_delete_native(redis_store, inserted_redis_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_delete_mongo_style(redis_store, inserted_redis_libs):
     """Delete should delete the items that match the mongodb-like filter"""
     addresses = ["Bujumbura, Burundi", "Non existent"]
@@ -219,6 +229,7 @@ async def test_delete_mongo_style(redis_store, inserted_redis_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_delete_hybrid(redis_store, inserted_redis_libs):
     """Delete should delete the items that match the mongodb-like filter AND the native filter"""
     unwanted_addresses = ["Stockholm, Sweden"]

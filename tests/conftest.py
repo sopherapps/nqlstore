@@ -1,9 +1,7 @@
 from typing import Generic, TypeVar
 
-import pymongo
 import pytest
 import pytest_asyncio
-import redis
 from pydantic import BaseModel
 
 from nqlstore import (
@@ -18,7 +16,7 @@ from nqlstore import (
 )
 from nqlstore.query.parsers import QueryParser
 
-from .utils import get_regex_test_params, insert_test_data
+from .utils import get_regex_test_params, insert_test_data, is_lib_installed
 
 _T = TypeVar("_T")
 
@@ -39,15 +37,29 @@ class Book(BaseModel, Generic[_T]):
         name = "books"
 
 
-MongoLibrary = MongoModel("MongoLibrary", Library)
-MongoBook = MongoModel("MongoBook", Book[PydanticObjectId])
-RedisLibrary = HashModel("RedisLibrary", Library)
-RedisBook = HashModel("RedisBook", Book[str])
-SqlLibrary = SQLModel("SqlLibrary", Library)
-SqlBook = SQLModel("SqlBook", Book[int])
+# default models
+SqlLibrary = Library
+SqlBook = Book[int]
+MongoLibrary = Library
+MongoBook = Book[str]
+RedisLibrary = Library
+RedisBook = Book[str]
+
+if is_lib_installed("sqlmodel"):
+    SqlLibrary = SQLModel("SqlLibrary", Library)
+    SqlBook = SQLModel("SqlBook", Book[int])
+
+if is_lib_installed("beanie"):
+    MongoLibrary = MongoModel("MongoLibrary", Library)
+    MongoBook = MongoModel("MongoBook", Book[PydanticObjectId])
+
+if is_lib_installed("redis_om"):
+    RedisLibrary = HashModel("RedisLibrary", Library)
+    RedisBook = HashModel("RedisBook", Book[str])
 
 
 @pytest.fixture
+@pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 def sql_store():
     """The sql store stored in memory"""
     store = SQLStore(uri="sqlite+aiosqlite:///:memory:")
@@ -55,8 +67,11 @@ def sql_store():
 
 
 @pytest.fixture
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 def mongo_store():
     """The mongodb store"""
+    import pymongo
+
     store = MongoStore(uri="mongodb://localhost:27017", database="testing")
     yield store
 
@@ -66,8 +81,11 @@ def mongo_store():
 
 
 @pytest.fixture
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 def redis_store():
     """The redis store"""
+    import redis
+
     store = RedisStore(uri="redis://localhost:6379/0")
     yield store
 
@@ -77,6 +95,7 @@ def redis_store():
 
 
 @pytest_asyncio.fixture()
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def inserted_redis_libs(redis_store):
     """The libraries inserted in the redis store"""
     inserted_libs, _ = await insert_test_data(
@@ -86,12 +105,14 @@ async def inserted_redis_libs(redis_store):
 
 
 @pytest.fixture
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 def regex_params_redis(inserted_redis_libs):
     """The regex test params for redis"""
     yield get_regex_test_params(inserted_redis_libs)
 
 
 @pytest_asyncio.fixture()
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def inserted_mongo_libs(mongo_store):
     """The libraries inserted in the mongodb store"""
     inserted_libs, _ = await insert_test_data(
@@ -101,12 +122,14 @@ async def inserted_mongo_libs(mongo_store):
 
 
 @pytest.fixture
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 def regex_params_mongo(inserted_mongo_libs):
     """The regex test params for mongo"""
     yield get_regex_test_params(inserted_mongo_libs)
 
 
 @pytest_asyncio.fixture()
+@pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 async def inserted_sql_libs(sql_store):
     """The libraries inserted in the sql store"""
     inserted_libs, _ = await insert_test_data(
@@ -116,19 +139,31 @@ async def inserted_sql_libs(sql_store):
 
 
 @pytest.fixture
+@pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 def regex_params_sql(inserted_sql_libs):
     """The regex test params for sql"""
     yield get_regex_test_params(inserted_sql_libs)
 
 
 @pytest_asyncio.fixture()
-async def query_parser():
-    """The default query parser"""
+@pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
+async def sql_qparser():
+    """The default query parser for sql"""
+    qparser = QueryParser()
+    sql_store = SQLStore(uri="sqlite+aiosqlite:///:memory:", parser=qparser)
+    await sql_store.register([SqlLibrary, SqlBook])
+    yield qparser
+
+
+@pytest_asyncio.fixture()
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
+async def redis_qparser():
+    """The default query parser for redis"""
+    import redis
+
     qparser = QueryParser()
     redis_store = RedisStore(uri="redis://localhost:6379/0", parser=qparser)
-    sql_store = SQLStore(uri="sqlite+aiosqlite:///:memory:", parser=qparser)
     await redis_store.register([RedisLibrary, RedisBook])
-    await sql_store.register([SqlLibrary, SqlBook])
 
     yield qparser
 
