@@ -3,9 +3,7 @@
 from typing import (
     AbstractSet,
     Any,
-    Callable,
     Dict,
-    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -17,31 +15,16 @@ from typing import (
 from pydantic_core import PydanticUndefined as Undefined
 from pydantic_core import PydanticUndefinedType as UndefinedType
 
-# redis imports
-try:
-    from aredis_om.model.model import FieldInfo as _RedisFieldInfo
-    from aredis_om.model.model import VectorFieldOptions
-except ImportError:
-    from pydantic.fields import FieldInfo as _RedisFieldInfo
-
-    VectorFieldOptions = Any
-
-# sql imports
-try:
-    from sqlmodel._compat import post_init_field_info
-    from sqlmodel.main import Column
-    from sqlmodel.main import FieldInfo as _SqlFieldInfo
-    from sqlmodel.main import NoArgAnyCallable, OnDeleteType, Relationship
-except ImportError:
-    from pydantic.fields import Field as Relationship
-    from pydantic.fields import FieldInfo as _FieldInfo
-
-    class _SqlFieldInfo(_FieldInfo): ...
-
-    post_init_field_info = lambda b: b
-    NoArgAnyCallable = Callable[[], Any]
-    OnDeleteType = Literal["CASCADE", "SET NULL", "RESTRICT"]
-    Column = Any
+from ._compat import (
+    Column,
+    NoArgAnyCallable,
+    OnDeleteType,
+    Relationship,
+    VectorFieldOptions,
+    _RedisFieldInfo,
+    _SqlFieldInfo,
+    post_init_field_info,
+)
 
 
 class FieldInfo(_SqlFieldInfo, _RedisFieldInfo):

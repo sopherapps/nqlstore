@@ -2,34 +2,23 @@
 
 from typing import Any, Callable, Iterable, TypeVar
 
-from pydantic.main import BaseModel, ModelT, create_model
+from pydantic.main import ModelT, create_model
 
-from nqlstore._base import BaseStore
-from nqlstore.query.parsers import QueryParser
-from nqlstore.query.selectors import QuerySelector
-
-# redis imports
-try:
-    from aredis_om import EmbeddedJsonModel as _EmbeddedJsonModel
-    from aredis_om import HashModel as _HashModel
-    from aredis_om import JsonModel as _JsonModel
-    from aredis_om import KNNExpression, Migrator
-    from aredis_om import RedisModel as _RedisModel
-    from aredis_om import get_redis_connection
-    from aredis_om.model.model import Expression, verify_pipeline_response
-    from redis.client import Pipeline
-except ImportError:
-    _EmbeddedJsonModel = BaseModel
-    _HashModel = BaseModel
-    _JsonModel = BaseModel
-    _RedisModel = BaseModel
-    KNNExpression = Any
-    Expression = Any
-    Pipeline = Any
-    Migrator = lambda *a, **k: dict(**k)
-    get_redis_connection = lambda *a, **k: dict(**k)
-    verify_pipeline_response = lambda *a, **k: dict(**k)
-
+from ._base import BaseStore
+from ._compat import (
+    Expression,
+    KNNExpression,
+    Migrator,
+    Pipeline,
+    _EmbeddedJsonModel,
+    _HashModel,
+    _JsonModel,
+    _RedisModel,
+    get_redis_connection,
+    verify_pipeline_response,
+)
+from .query.parsers import QueryParser
+from .query.selectors import QuerySelector
 
 _T = TypeVar("_T", bound=_RedisModel)
 

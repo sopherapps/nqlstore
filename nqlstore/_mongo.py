@@ -7,34 +7,17 @@ from pydantic import BaseModel
 from pydantic import Field as _Field
 from pydantic.main import ModelT, create_model
 
-from nqlstore._base import BaseStore
-
-# mongo imports
-try:
-    from beanie import (
-        BulkWriter,
-        Document,
-        PydanticObjectId,
-        SortDirection,
-        WriteRules,
-        init_beanie,
-    )
-    from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorClientSession
-except ImportError:
-    Document = BaseModel
-    init_beanie = lambda *a, **k: dict(**k)
-    BulkWriter = Any
-    SortDirection = Any
-    AsyncIOMotorClient = lambda *a, **k: dict(**k)
-    AsyncIOMotorClientSession = Any
-    PydanticObjectId = Any
-
-    import enum
-
-    class WriteRules(str, enum.Enum):
-        DO_NOTHING = "DO_NOTHING"
-        WRITE = "WRITE"
-
+from ._base import BaseStore
+from ._compat import (
+    AsyncIOMotorClient,
+    AsyncIOMotorClientSession,
+    BulkWriter,
+    Document,
+    PydanticObjectId,
+    SortDirection,
+    WriteRules,
+    init_beanie,
+)
 
 _T = TypeVar("_T", bound=Document)
 _Filter = Mapping[str, Any] | bool
