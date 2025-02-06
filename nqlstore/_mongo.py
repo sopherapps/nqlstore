@@ -11,7 +11,14 @@ from nqlstore._base import BaseStore
 
 # mongo imports
 try:
-    from beanie import Document, PydanticObjectId, WriteRules, init_beanie
+    from beanie import (
+        BulkWriter,
+        Document,
+        PydanticObjectId,
+        SortDirection,
+        WriteRules,
+        init_beanie,
+    )
     from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorClientSession
 except ImportError:
     Document = BaseModel
