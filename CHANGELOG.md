@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Changed Github actions to run tests for each extra plus the `test` extra i.e. `[sql,test]`, `[redis,test]` etc. 
+
 ### Fixed
 
 - Fixed Type annotations for `SQLModel`, `MongoModel`, `JsonModel`, `HashModel` and `EmbeddedJsonModel`
+- Fixed import errors when only `sql` or `redis` or `mongo` extras are installed.
 
 ## [0.0.2] - 2025-02-06
 
