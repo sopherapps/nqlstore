@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.3] - 2025-02-06
+
 ### Changed
 
 - Changed Github actions to run tests for each extra plus the `test` extra i.e. `[sql,test]`, `[redis,test]` etc. 
