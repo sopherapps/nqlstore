@@ -42,7 +42,7 @@ support your favourite database technology.
 Install NQLStore from pypi, with any of the options: `sql`, `mongo`, `redis`, `all`.
 
 ```shell
-pip install nqlstore[all]
+pip install "nqlstore[all]"
 ```
 
 ### Create Schemas
