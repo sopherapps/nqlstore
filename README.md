@@ -230,9 +230,7 @@ Updating items in a store, call the `store.update()` method.
 The method returns the newly updated records.  
 The `filters` follow the same style as that used when querying as shown [above](#read). 
 
-The `updates` objects are simply dictionaries of the new field values.  
-
-##### SQL
+The `updates` objects are simply dictionaries of the new field values.
 
 ```python
 # Mongo-style of filtering: works with any underlying database technology
@@ -351,7 +349,7 @@ Licensed under the [MIT License](./LICENSE)
 
 ## Gratitude
 
-Thanks goes to the names of the people in the [CREDITS.md](./CREDITS.md), for the efforts
+Thanks goes to the people in the [CREDITS.md](./CREDITS.md), for the efforts
 they have put into this project.  
 
 But above all, glory be to God.
