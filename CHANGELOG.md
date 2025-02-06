@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.2] - 2025-02-06
+
 ### Added
 
 - Added regex support for SQL
