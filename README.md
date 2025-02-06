@@ -334,7 +334,6 @@ libraries = await redis_store.delete(
 ## TODO
 
 - [ ] Implement dot notation for embedded documents and arrays (i.e. relationships in SQL)
-- [ ] Add sort by field not just by entire record (accept `dict`s instead of `int` in the sort argument)
 - [ ] Add documentation site
 - [ ] Add example applications
 
