@@ -3,16 +3,25 @@ import re
 import pytest
 
 from tests.conftest import MongoBook, MongoLibrary
-from tests.utils import insert_test_data, load_fixture
+from tests.utils import load_fixture
 
 _LIBRARY_DATA = load_fixture("libraries.json")
 
 
 @pytest.mark.asyncio
 async def test_find(mongo_store, inserted_mongo_libs):
-    """Update should update the items that match the filter"""
-    got = await mongo_store.find(MongoLibrary, MongoLibrary.id != None, skip=1)
+    """Find should find the items that match the filter"""
+    got = await mongo_store.find(MongoLibrary, {}, skip=1)
     expected = [v for idx, v in enumerate(inserted_mongo_libs) if idx >= 1]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("index", range(4))
+async def test_regex_find(mongo_store, regex_params_mongo, index):
+    """Find with regex should find the items that match the regex"""
+    filters, expected = regex_params_mongo[index]
+    got = await mongo_store.find(MongoLibrary, filters)
     assert got == expected
 
 

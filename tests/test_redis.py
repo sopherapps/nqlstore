@@ -1,7 +1,7 @@
 import pytest
 
 from tests.conftest import RedisBook, RedisLibrary
-from tests.utils import insert_test_data, load_fixture
+from tests.utils import load_fixture
 
 _LIBRARY_DATA = load_fixture("libraries.json")
 _TEST_ADDRESS = "Hoima, Uganda"
@@ -37,6 +37,17 @@ async def test_find_mongo_style(redis_store, inserted_redis_libs):
         if v.address == _TEST_ADDRESS or v.name == "Bar"
     ][1:]
     assert got == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("index", range(4))
+async def test_regex_find_mongo_style(redis_store, regex_params_redis, index):
+    """Find with regex should find the items that match the regex"""
+    filters, expected = regex_params_redis[index]
+    with pytest.raises(
+        NotImplementedError, match=r"redis text search is too inexpressive for regex."
+    ):
+        await redis_store.find(RedisLibrary, query=filters)
 
 
 @pytest.mark.asyncio

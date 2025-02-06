@@ -1,12 +1,14 @@
 import json
+import re
 from os import path
 from typing import Any, TypeVar
 
+from beanie import PydanticObjectId
 from pydantic import BaseModel
 from sqlalchemy.sql._typing import _ColumnExpressionArgument
 
 from nqlstore._base import BaseStore
-from nqlstore.sql import SQLModel, select
+from nqlstore._sql import SQLModel, select
 
 _SQLFilter = _ColumnExpressionArgument[bool] | bool
 _TESTS_FOLDER = path.dirname(path.abspath(__file__))
@@ -49,12 +51,27 @@ async def insert_test_data(
     libraries = await store.insert(library_model, library_data)
 
     book_data = [
-        book_model(library_id=libraries[idx % 2].id, **data)
+        book_model(library_id=_get_id(libraries[idx % 2]), **data)
         for idx, data in enumerate(book_data)
     ]
     books = await store.insert(book_model, book_data)
 
     return libraries, books
+
+
+def _get_id(lib: _LibType) -> PydanticObjectId | int | str:
+    """Gets the id of the lib
+
+    Args:
+        lib: the library to extract the id from
+
+    Returns:
+        the id or pk
+    """
+    try:
+        return lib.id
+    except AttributeError:
+        return lib.pk
 
 
 def to_sql_text(model: type[SQLModel], queries: tuple[_SQLFilter, ...]) -> str:
@@ -71,3 +88,32 @@ def to_sql_text(model: type[SQLModel], queries: tuple[_SQLFilter, ...]) -> str:
     """
     sql = select(model).where(*queries)
     return str(sql.compile())
+
+
+def get_regex_test_params(libs: list[_LibType]) -> list[tuple[dict, list[_LibType]]]:
+    """Generates the test params for the REGEX test for the given libs
+
+    Args:
+        libs: the Library records
+
+    Returns:
+        pairs of regex filter and expected output after querying
+    """
+    return [
+        (
+            {"name": {"$regex": "^bu.*", "$options": "i"}},
+            [v for v in libs if re.match(r"^bu.*", v.name, re.I)],
+        ),
+        (
+            {"name": {"$regex": "^bu.*"}},
+            [v for v in libs if re.match(r"^bu.*", v.name)],
+        ),
+        (
+            {"name": {"$regex": "am.*"}},
+            [v for v in libs if re.match(r".*am.*", v.name)],
+        ),
+        (
+            {"name": {"$regex": ".*i$"}},
+            [v for v in libs if re.match(r".*i$", v.name)],
+        ),
+    ]

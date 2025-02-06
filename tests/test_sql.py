@@ -20,7 +20,7 @@ async def test_find_native(sql_store, inserted_sql_libs):
         for v in inserted_sql_libs
         if v.address == _TEST_ADDRESS or v.name.startswith("Ba")
     ][1:]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
 
 @pytest.mark.asyncio
@@ -34,7 +34,16 @@ async def test_find_mongo_style(sql_store, inserted_sql_libs):
     expected = [
         v for v in inserted_sql_libs if v.address == _TEST_ADDRESS or v.name == "Bar"
     ][1:]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("index", range(4))
+async def test_regex_find_mongo_style(sql_store, regex_params_sql, index):
+    """Find with regex should find the items that match the regex"""
+    filters, expected = regex_params_sql[index]
+    got = await sql_store.find(SqlLibrary, query=filters)
+    assert _ordered(got) == _ordered(expected)
 
 
 @pytest.mark.asyncio
@@ -51,7 +60,7 @@ async def test_find_hybrid(sql_store, inserted_sql_libs):
         for v in inserted_sql_libs
         if v.address == _TEST_ADDRESS and v.name.startswith("Ba")
     ][1:]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
 
 @pytest.mark.asyncio
@@ -62,7 +71,7 @@ async def test_create(sql_store):
     expected = [
         SqlLibrary(id=idx + 1, **item) for idx, item in enumerate(_LIBRARY_DATA)
     ]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
 
 @pytest.mark.asyncio
@@ -83,7 +92,7 @@ async def test_update_native(sql_store, inserted_sql_libs):
         for record in inserted_sql_libs
         if matches_query(record)
     ]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
     # all library data in database
     got = await sql_store.find(SqlLibrary)
@@ -91,7 +100,7 @@ async def test_update_native(sql_store, inserted_sql_libs):
         (record.model_copy(update=updates) if matches_query(record) else record)
         for record in inserted_sql_libs
     ]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
 
 @pytest.mark.asyncio
@@ -118,7 +127,7 @@ async def test_update_mongo_style(sql_store, inserted_sql_libs):
         if matches_query(record)
     ]
 
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
     # all library data in database
     got = await sql_store.find(SqlLibrary)
@@ -126,7 +135,7 @@ async def test_update_mongo_style(sql_store, inserted_sql_libs):
         (record.model_copy(update=updates) if matches_query(record) else record)
         for record in inserted_sql_libs
     ]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
 
 @pytest.mark.asyncio
@@ -148,7 +157,7 @@ async def test_update_hybrid(sql_store, inserted_sql_libs):
         for record in inserted_sql_libs
         if matches_query(record)
     ]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
     # all library data in database
     got = await sql_store.find(SqlLibrary)
@@ -156,7 +165,7 @@ async def test_update_hybrid(sql_store, inserted_sql_libs):
         (record.model_copy(update=updates) if matches_query(record) else record)
         for record in inserted_sql_libs
     ]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
 
 @pytest.mark.asyncio
@@ -166,12 +175,12 @@ async def test_delete_native(sql_store, inserted_sql_libs):
     # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await sql_store.delete(SqlLibrary, SqlLibrary.name.startswith("bu"))
     expected = [v for v in inserted_sql_libs if v.name.lower().startswith("bu")]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
     # all data in database
     got = await sql_store.find(SqlLibrary)
     expected = [v for v in inserted_sql_libs if not v.name.lower().startswith("bu")]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
 
 @pytest.mark.asyncio
@@ -196,7 +205,7 @@ async def test_delete_mongo_style(sql_store, inserted_sql_libs):
         for v in inserted_sql_libs
         if v.address in addresses or v.name not in unwanted_names
     ]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
     # all data in database
     got = await sql_store.find(SqlLibrary)
@@ -205,7 +214,7 @@ async def test_delete_mongo_style(sql_store, inserted_sql_libs):
         for v in inserted_sql_libs
         if v.address not in addresses and v.name in unwanted_names
     ]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
 
 @pytest.mark.asyncio
@@ -225,7 +234,7 @@ async def test_delete_hybrid(sql_store, inserted_sql_libs):
         for v in inserted_sql_libs
         if v.address not in unwanted_addresses and v.name.lower().startswith("bu")
     ]
-    assert got == expected
+    assert _ordered(got) == _ordered(expected)
 
     # all data in database
     got = await sql_store.find(SqlLibrary)
@@ -235,3 +244,15 @@ async def test_delete_hybrid(sql_store, inserted_sql_libs):
         if v.address in unwanted_addresses or not v.name.lower().startswith("bu")
     ]
     assert got == expected
+
+
+def _ordered(libs: list[SqlLibrary]) -> list[SqlLibrary]:
+    """Sorts the libraries by id and returns them
+
+    Args:
+        libs: the library instances to sort
+
+    Returns:
+        the ordered libraries
+    """
+    return sorted(libs, key=lambda v: v.id)

@@ -1,62 +1,50 @@
+from typing import Generic, TypeVar
+
 import pymongo
 import pytest
 import pytest_asyncio
 import redis
+from pydantic import BaseModel
 
-from nqlstore.mongo import Document, Indexed, MongoStore, PydanticObjectId
+from nqlstore import (
+    Field,
+    HashModel,
+    MongoModel,
+    MongoStore,
+    PydanticObjectId,
+    RedisStore,
+    SQLModel,
+    SQLStore,
+)
 from nqlstore.query.parsers import QueryParser
-from nqlstore.redis import Field as RedisField
-from nqlstore.redis import HashModel, RedisStore
-from nqlstore.sql import Field as SqlField
-from nqlstore.sql import SQLModel, SQLStore
 
-from .utils import insert_test_data
+from .utils import get_regex_test_params, insert_test_data
+
+_T = TypeVar("_T")
 
 
-class MongoLibrary(Document):
-    address: str
-    name: str
+class Library(BaseModel):
+    address: str = Field(index=True, full_text_search=True)
+    name: str = Field(index=True, full_text_search=True)
 
     class Settings:
         name = "libraries"
 
 
-class MongoBook(Document):
-    title: Indexed(str)
-    library_id: PydanticObjectId
+class Book(BaseModel, Generic[_T]):
+    title: str = Field(index=True)
+    library_id: _T | None = Field(default=None, foreign_key="sqllibrary.id")
 
     class Settings:
         name = "books"
 
 
-class RedisLibrary(HashModel):
-    address: str = RedisField(index=True, full_text_search=True)
-    name: str = RedisField(index=True, full_text_search=True)
-
-    @property
-    def id(self):
-        return self.pk
-
-
-class RedisBook(HashModel):
-    title: str = RedisField(index=True)
-    library_id: str
-
-    @property
-    def id(self):
-        return self.pk
-
-
-class SqlLibrary(SQLModel, table=True):
-    id: int | None = SqlField(default=None, primary_key=True)
-    address: str
-    name: str
-
-
-class SqlBook(SQLModel, table=True):
-    id: int | None = SqlField(default=None, primary_key=True)
-    title: str
-    library_id: int = SqlField(default=None, foreign_key="sqllibrary.id")
+MongoLibrary = MongoModel("MongoLibrary", Library)
+MongoBook = MongoModel("MongoBook", Book[PydanticObjectId])
+RedisLibrary = HashModel("RedisLibrary", Library)
+RedisBook = HashModel("RedisBook", Book[str])
+SqlLibrary = SQLModel("SqlLibrary", Library)
+SqlBook = SQLModel("SqlBook", Book[int])
 
 
 @pytest.fixture
@@ -97,6 +85,12 @@ async def inserted_redis_libs(redis_store):
     yield inserted_libs
 
 
+@pytest.fixture
+def regex_params_redis(inserted_redis_libs):
+    """The regex test params for redis"""
+    yield get_regex_test_params(inserted_redis_libs)
+
+
 @pytest_asyncio.fixture()
 async def inserted_mongo_libs(mongo_store):
     """The libraries inserted in the mongodb store"""
@@ -106,6 +100,12 @@ async def inserted_mongo_libs(mongo_store):
     yield inserted_libs
 
 
+@pytest.fixture
+def regex_params_mongo(inserted_mongo_libs):
+    """The regex test params for mongo"""
+    yield get_regex_test_params(inserted_mongo_libs)
+
+
 @pytest_asyncio.fixture()
 async def inserted_sql_libs(sql_store):
     """The libraries inserted in the sql store"""
@@ -113,6 +113,12 @@ async def inserted_sql_libs(sql_store):
         sql_store, library_model=SqlLibrary, book_model=SqlBook
     )
     yield inserted_libs
+
+
+@pytest.fixture
+def regex_params_sql(inserted_sql_libs):
+    """The regex test params for sql"""
+    yield get_regex_test_params(inserted_sql_libs)
 
 
 @pytest_asyncio.fixture()

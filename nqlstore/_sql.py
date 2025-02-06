@@ -2,19 +2,23 @@
 
 from typing import Any, Iterable, TypeVar
 
+from pydantic import create_model
+from pydantic.main import ModelT
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.sql._typing import (
     _ColumnExpressionArgument,
     _ColumnExpressionOrStrLabelArgument,
 )
-from sqlmodel import *
+from sqlmodel import SQLModel as _SQLModel
+from sqlmodel import delete, insert, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ._base import BaseStore
+from ._field import Field
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
-_T = TypeVar("_T", bound=SQLModel)
+_T = TypeVar("_T", bound=_SQLModel)
 _Filter = _ColumnExpressionArgument[bool] | bool
 
 
@@ -29,7 +33,7 @@ class SQLStore(BaseStore):
         tables = [v.__table__ for v in models]
         async with self._engine.begin() as conn:
             await conn.run_sync(
-                SQLModel.metadata.create_all, tables=tables, checkfirst=checkfirst
+                _SQLModel.metadata.create_all, tables=tables, checkfirst=checkfirst
             )
 
     async def insert(
@@ -110,3 +114,40 @@ class SQLStore(BaseStore):
             results = await cursor.all()
             await session.commit()
             return [model(**row._mapping) for row in results]
+
+
+class _SQLModelMeta(_SQLModel):
+    """The base class for all SQL models"""
+
+    id: int | None = Field(default=None, primary_key=True)
+
+
+def SQLModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+    """Creates a new SQLModel for the given schema for redis
+
+    A new model can be defined by::
+
+        Model = SQLModel("Model", Schema)
+
+    Args:
+        name: the name of the model
+        schema: the schema from which the model is to be made
+
+    Returns:
+        a SQLModel model class with the given name
+    """
+    # FIXME: Handle scenario where a pk is defined
+    return create_model(
+        name,
+        __doc__=schema.__doc__,
+        __slots__=schema.__slots__,
+        __cls_kwargs__={"table": True},
+        __base__=(
+            _SQLModelMeta,
+            schema,
+        ),
+        **{
+            field_name: (field.annotation, field)
+            for field_name, field in schema.model_fields.items()
+        },
+    )
