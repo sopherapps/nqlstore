@@ -4,19 +4,32 @@ from typing import Any, Iterable, TypeVar
 
 from pydantic import create_model
 from pydantic.main import ModelT
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.sql._typing import (
-    _ColumnExpressionArgument,
-    _ColumnExpressionOrStrLabelArgument,
-)
-from sqlmodel import SQLModel as _SQLModel
-from sqlmodel import delete, insert, select, update
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ._base import BaseStore
 from ._field import Field
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
+
+# sql imports
+try:
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.sql._typing import (
+        _ColumnExpressionArgument,
+        _ColumnExpressionOrStrLabelArgument,
+    )
+    from sqlmodel import SQLModel as _SQLModel
+    from sqlmodel import delete, insert, select, update
+    from sqlmodel.ext.asyncio.session import AsyncSession
+except ImportError:
+    from typing import Set as _ColumnExpressionArgument
+    from typing import Set as _ColumnExpressionOrStrLabelArgument
+
+    from pydantic import BaseModel as _SQLModel
+
+    create_async_engine = lambda *a, **k: dict(**k)
+    delete = insert = select = update = create_async_engine
+    AsyncSession = Any
+
 
 _T = TypeVar("_T", bound=_SQLModel)
 _Filter = _ColumnExpressionArgument[bool] | bool

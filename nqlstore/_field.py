@@ -3,7 +3,9 @@
 from typing import (
     AbstractSet,
     Any,
+    Callable,
     Dict,
+    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -12,18 +14,31 @@ from typing import (
     overload,
 )
 
-from aredis_om.model.model import FieldInfo as _RedisFieldInfo
-from aredis_om.model.model import VectorFieldOptions
-from sqlmodel._compat import post_init_field_info
-from sqlmodel.main import Column
-from sqlmodel.main import FieldInfo as _SqlFieldInfo
-from sqlmodel.main import (
-    NoArgAnyCallable,
-    OnDeleteType,
-    Relationship,
-    Undefined,
-    UndefinedType,
-)
+from pydantic_core import PydanticUndefined as Undefined
+from pydantic_core import PydanticUndefinedType as UndefinedType
+
+# redis imports
+try:
+    from aredis_om.model.model import FieldInfo as _RedisFieldInfo
+    from aredis_om.model.model import VectorFieldOptions
+except ImportError:
+    from pydantic.fields import FieldInfo as _RedisFieldInfo
+
+    VectorFieldOptions = Any
+
+# sql imports
+try:
+    from sqlmodel._compat import post_init_field_info
+    from sqlmodel.main import Column
+    from sqlmodel.main import FieldInfo as _SqlFieldInfo
+    from sqlmodel.main import NoArgAnyCallable, OnDeleteType, Relationship
+except ImportError:
+    from pydantic.fields import FieldInfo as _SqlFieldInfo
+
+    post_init_field_info = lambda b: b
+    NoArgAnyCallable = Callable[[], Any]
+    OnDeleteType = Literal["CASCADE", "SET NULL", "RESTRICT"]
+    Column = Any
 
 
 class FieldInfo(_SqlFieldInfo, _RedisFieldInfo):
@@ -36,7 +51,7 @@ class FieldInfo(_SqlFieldInfo, _RedisFieldInfo):
 def Field(
     default: Any = Undefined,
     *,
-    default_factory: Optional[NoArgAnyCallable] = None,
+    default_factory: Optional["NoArgAnyCallable"] = None,
     alias: Optional[str] = None,
     title: Optional[str] = None,
     description: Optional[str] = None,
@@ -74,7 +89,7 @@ def Field(
     sortable: Union[bool, UndefinedType] = Undefined,
     case_sensitive: Union[bool, UndefinedType] = Undefined,
     full_text_search: Union[bool, UndefinedType] = Undefined,
-    vector_options: Optional[VectorFieldOptions] = None,
+    vector_options: Optional["VectorFieldOptions"] = None,
     schema_extra: Optional[Dict[str, Any]] = None,
 ) -> Any: ...
 
@@ -85,7 +100,7 @@ def Field(
 def Field(
     default: Any = Undefined,
     *,
-    default_factory: Optional[NoArgAnyCallable] = None,
+    default_factory: Optional["NoArgAnyCallable"] = None,
     alias: Optional[str] = None,
     title: Optional[str] = None,
     description: Optional[str] = None,
@@ -124,7 +139,7 @@ def Field(
     sortable: Union[bool, UndefinedType] = Undefined,
     case_sensitive: Union[bool, UndefinedType] = Undefined,
     full_text_search: Union[bool, UndefinedType] = Undefined,
-    vector_options: Optional[VectorFieldOptions] = None,
+    vector_options: Optional["VectorFieldOptions"] = None,
     schema_extra: Optional[Dict[str, Any]] = None,
 ) -> Any: ...
 
@@ -143,7 +158,7 @@ def Field(
 def Field(
     default: Any = Undefined,
     *,
-    default_factory: Optional[NoArgAnyCallable] = None,
+    default_factory: Optional["NoArgAnyCallable"] = None,
     alias: Optional[str] = None,
     title: Optional[str] = None,
     description: Optional[str] = None,
@@ -170,11 +185,11 @@ def Field(
     regex: Optional[str] = None,
     discriminator: Optional[str] = None,
     repr: bool = True,
-    sa_column: Union[Column, UndefinedType] = Undefined,  # type: ignore
+    sa_column: Union["Column", UndefinedType] = Undefined,  # type: ignore
     sortable: Union[bool, UndefinedType] = Undefined,
     case_sensitive: Union[bool, UndefinedType] = Undefined,
     full_text_search: Union[bool, UndefinedType] = Undefined,
-    vector_options: Optional[VectorFieldOptions] = None,
+    vector_options: Optional["VectorFieldOptions"] = None,
     schema_extra: Optional[Dict[str, Any]] = None,
 ) -> Any: ...
 
@@ -182,7 +197,7 @@ def Field(
 def Field(
     default: Any = Undefined,
     *,
-    default_factory: Optional[NoArgAnyCallable] = None,
+    default_factory: Optional["NoArgAnyCallable"] = None,
     alias: Optional[str] = None,
     title: Optional[str] = None,
     description: Optional[str] = None,
@@ -216,13 +231,13 @@ def Field(
     nullable: Union[bool, UndefinedType] = Undefined,
     index: Union[bool, UndefinedType] = Undefined,
     sa_type: Union[Type[Any], UndefinedType] = Undefined,
-    sa_column: Union[Column, UndefinedType] = Undefined,  # type: ignore
+    sa_column: Union["Column", UndefinedType] = Undefined,  # type: ignore
     sa_column_args: Union[Sequence[Any], UndefinedType] = Undefined,
     sa_column_kwargs: Union[Mapping[str, Any], UndefinedType] = Undefined,
     sortable: Union[bool, UndefinedType] = Undefined,
     case_sensitive: Union[bool, UndefinedType] = Undefined,
     full_text_search: Union[bool, UndefinedType] = Undefined,
-    vector_options: Optional[VectorFieldOptions] = None,
+    vector_options: Optional["VectorFieldOptions"] = None,
     schema_extra: Optional[Dict[str, Any]] = None,
 ) -> Any:
     current_schema_extra = schema_extra or {}

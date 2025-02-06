@@ -3,12 +3,13 @@ import re
 import pytest
 
 from tests.conftest import MongoBook, MongoLibrary
-from tests.utils import load_fixture
+from tests.utils import is_lib_installed, load_fixture
 
 _LIBRARY_DATA = load_fixture("libraries.json")
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def test_find(mongo_store, inserted_mongo_libs):
     """Find should find the items that match the filter"""
     got = await mongo_store.find(MongoLibrary, {}, skip=1)
@@ -17,6 +18,7 @@ async def test_find(mongo_store, inserted_mongo_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 @pytest.mark.parametrize("index", range(4))
 async def test_regex_find(mongo_store, regex_params_mongo, index):
     """Find with regex should find the items that match the regex"""
@@ -26,6 +28,7 @@ async def test_regex_find(mongo_store, regex_params_mongo, index):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def test_create(mongo_store):
     """Create should add many items to the mongo database"""
     await mongo_store.register([MongoLibrary, MongoBook])
@@ -35,6 +38,7 @@ async def test_create(mongo_store):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def test_update(mongo_store, inserted_mongo_libs):
     """Update should update the items that match the filter"""
     updates = {"address": "some new address"}
@@ -56,6 +60,7 @@ async def test_update(mongo_store, inserted_mongo_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def test_update_native(mongo_store, inserted_mongo_libs):
     """Update should update the items that match the filter with mongo-style update operators"""
     updates = {"$set": {"address": "some new address"}}
@@ -77,6 +82,7 @@ async def test_update_native(mongo_store, inserted_mongo_libs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def test_delete(mongo_store, inserted_mongo_libs):
     """Delete should remove the items that match the filter"""
     # in immediate response

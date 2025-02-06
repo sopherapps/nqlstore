@@ -1,14 +1,25 @@
+import importlib
 import json
 import re
 from os import path
 from typing import Any, TypeVar
 
-from beanie import PydanticObjectId
 from pydantic import BaseModel
-from sqlalchemy.sql._typing import _ColumnExpressionArgument
 
 from nqlstore._base import BaseStore
 from nqlstore._sql import SQLModel, select
+
+# SQL imports
+try:
+    from sqlalchemy.sql._typing import _ColumnExpressionArgument
+except ImportError:
+    from typing import Set as _ColumnExpressionArgument
+
+# Mongo imports
+try:
+    from beanie import PydanticObjectId
+except ImportError:
+    PydanticObjectId = Any
 
 _SQLFilter = _ColumnExpressionArgument[bool] | bool
 _TESTS_FOLDER = path.dirname(path.abspath(__file__))
@@ -117,3 +128,15 @@ def get_regex_test_params(libs: list[_LibType]) -> list[tuple[dict, list[_LibTyp
             [v for v in libs if re.match(r".*i$", v.name)],
         ),
     ]
+
+
+def is_lib_installed(lib: str) -> bool:
+    """Check if a library is installed.
+
+    Args:
+        lib: the library to check
+
+    Returns:
+        True if library is installed else False
+    """
+    return importlib.util.find_spec(lib) is not None
