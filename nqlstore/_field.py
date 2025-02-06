@@ -33,7 +33,10 @@ try:
     from sqlmodel.main import FieldInfo as _SqlFieldInfo
     from sqlmodel.main import NoArgAnyCallable, OnDeleteType, Relationship
 except ImportError:
-    from pydantic.fields import FieldInfo as _SqlFieldInfo
+    from pydantic.fields import Field as Relationship
+    from pydantic.fields import FieldInfo as _FieldInfo
+
+    class _SqlFieldInfo(_FieldInfo): ...
 
     post_init_field_info = lambda b: b
     NoArgAnyCallable = Callable[[], Any]
