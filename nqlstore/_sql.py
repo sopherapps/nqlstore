@@ -122,7 +122,7 @@ class _SQLModelMeta(_SQLModel):
     id: int | None = Field(default=None, primary_key=True)
 
 
-def SQLModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+def SQLModel(name: str, schema: type[ModelT], /) -> type[_SQLModel]:
     """Creates a new SQLModel for the given schema for redis
 
     A new model can be defined by::

@@ -162,7 +162,7 @@ class MongoStore(BaseStore):
         return deleted_items
 
 
-def MongoModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+def MongoModel(name: str, schema: type[ModelT], /) -> type[Document]:
     """Creates a new Mongo Model for the given schema
 
     A new model can be defined by::

@@ -114,7 +114,7 @@ class RedisStore(BaseStore):
         return matched_items
 
 
-def HashModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+def HashModel(name: str, schema: type[ModelT], /) -> type[_HashModel]:
     """Creates a new HashModel for the given schema for redis
 
     A new model can be defined by::
@@ -144,7 +144,7 @@ def HashModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
     )
 
 
-def JsonModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+def JsonModel(name: str, schema: type[ModelT], /) -> type[_JsonModel]:
     """Creates a new JsonModel for the given schema for redis
 
     A new model can be defined by::
@@ -174,7 +174,7 @@ def JsonModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
     )
 
 
-def EmbeddedJsonModel(name: str, schema: type[ModelT], /) -> type[ModelT]:
+def EmbeddedJsonModel(name: str, schema: type[ModelT], /) -> type[_EmbeddedJsonModel]:
     """Creates a new EmbeddedJsonModel for the given schema for redis
 
     A new model can be defined by::

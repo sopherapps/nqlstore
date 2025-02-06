@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Type annotations for `SQLModel`, `MongoModel`, `JsonModel`, `HashModel` and `EmbeddedJsonModel`
+
 ## [0.0.2] - 2025-02-06
 
 ### Added
