@@ -7,19 +7,8 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from nqlstore._base import BaseStore
+from nqlstore._compat import PydanticObjectId, _ColumnExpressionArgument
 from nqlstore._sql import SQLModel, select
-
-# SQL imports
-try:
-    from sqlalchemy.sql._typing import _ColumnExpressionArgument
-except ImportError:
-    from typing import Set as _ColumnExpressionArgument
-
-# Mongo imports
-try:
-    from beanie import PydanticObjectId
-except ImportError:
-    PydanticObjectId = Any
 
 _SQLFilter = _ColumnExpressionArgument[bool] | bool
 _TESTS_FOLDER = path.dirname(path.abspath(__file__))

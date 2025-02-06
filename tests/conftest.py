@@ -37,26 +37,25 @@ class Book(BaseModel, Generic[_T]):
         name = "books"
 
 
+# default models
+SqlLibrary = Library
+SqlBook = Book[int]
+MongoLibrary = Library
+MongoBook = Book[str]
+RedisLibrary = Library
+RedisBook = Book[str]
+
 if is_lib_installed("sqlmodel"):
     SqlLibrary = SQLModel("SqlLibrary", Library)
     SqlBook = SQLModel("SqlBook", Book[int])
-else:
-    SqlLibrary = Library
-    SqlBook = Book[int]
 
 if is_lib_installed("beanie"):
     MongoLibrary = MongoModel("MongoLibrary", Library)
     MongoBook = MongoModel("MongoBook", Book[PydanticObjectId])
-else:
-    MongoLibrary = Library
-    MongoBook = Book[str]
 
 if is_lib_installed("redis_om"):
     RedisLibrary = HashModel("RedisLibrary", Library)
     RedisBook = HashModel("RedisBook", Book[str])
-else:
-    RedisLibrary = Library
-    RedisBook = Book[str]
 
 
 @pytest.fixture
