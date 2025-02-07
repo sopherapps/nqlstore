@@ -160,6 +160,27 @@ def test_not_sql(sql_qparser):
 
 
 @pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
+def test_regex_redis(redis_qparser):
+    """$regex is not implemented for redis"""
+    query = {"name": {"$regex": "^be.*", "$options": "i"}}
+    with pytest.raises(
+        NotImplementedError, match=r"redis text search is too inexpressive for regex.*"
+    ):
+        redis_qparser.to_redis(RedisLibrary, query)
+
+
+@pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
+def test_regex_sql(sql_qparser):
+    """$redis checks given item against a given regular expression"""
+    query = {"name": {"$regex": "^be.*", "$options": "i"}}
+    got = to_sql_text(SqlLibrary, sql_qparser.to_sql(SqlLibrary, query))
+    expected = to_sql_text(
+        SqlLibrary, ((SqlLibrary.name.regexp_match("(?i)^be.*", flags="i")),)
+    )
+    assert got == expected
+
+
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 def test_and_redis(redis_qparser):
     """$and checks all conditions fulfilled in redis"""
     query = {
