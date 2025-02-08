@@ -54,16 +54,14 @@ technology.
 ```python
 # schemas.py
 
-from typing import Generic, TypeVar
-from nqlstore import Field
+from nqlstore import Field, Relationship
 from pydantic import BaseModel
-
-_ID = TypeVar("_ID")
 
 
 class Library(BaseModel):
     address: str = Field(index=True, full_text_search=True)
     name: str = Field(index=True, full_text_search=True)
+    books: list["Book"] = Relationship(back_populates="library")
 
     class Settings:
         # this Settings class is optional. It is only used by Mongo models
@@ -71,16 +69,10 @@ class Library(BaseModel):
         name = "libraries"
 
 
-class Book(BaseModel, Generic[_ID]):
-    # You can even use Generic models 
-    # See: https://docs.pydantic.dev/2.10/concepts/models/#generic-models
+class Book(BaseModel):
     title: str = Field(index=True)
-    library_id: _ID | None = Field(default=None, foreign_key="sqllibrary.id")
-
-    class Settings:
-        # this Settings class is optional. It is only used by Mongo models
-        # See https://beanie-odm.dev/tutorial/defining-a-document/
-        name = "books"
+    library_id: int | None = Field(default=None, foreign_key="sqllibrary.id")
+    library: Library | None = Relationship(back_populates="books")
 ```
 
 ### Initialize your store and its models
@@ -119,12 +111,12 @@ async def main():
 ```python
 # main.py
 
-from nqlstore import RedisStore, HashModel
+from nqlstore import RedisStore, EmbeddedJsonModel, JsonModel
 from .schemas import Book, Library
 
 # Define models specific to redis.
-RedisLibrary = HashModel("RedisLibrary", Library)
-RedisBook = HashModel("RedisBook", Book[str])
+RedisBook = EmbeddedJsonModel("RedisBook", Book[str])
+RedisLibrary = JsonModel("RedisLibrary", Library, embedded_models=[(Library.books, RedisBook)])
 
 async def main():
   redis_store = RedisStore(uri="rediss://username:password@localhost:6379/0")
@@ -139,18 +131,17 @@ async def main():
 ```python
 # main.py
 
-from nqlstore import MongoStore, PydanticObjectId, MongoModel
-from .schemas import Book, Library
+from nqlstore import MongoStore, MongoModel
+from .schemas import Library
 
 # Define models specific to MongoDB.
 MongoLibrary = MongoModel("MongoLibrary", Library)
-MongoBook = MongoModel("MongoBook", Book[PydanticObjectId])
+
 
 async def main():
   mongo_store = MongoStore(uri="mongodb://localhost:27017", database="testing")
   await mongo_store.register([
     MongoLibrary,
-    MongoBook,
   ])
 
 ```

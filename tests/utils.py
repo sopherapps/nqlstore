@@ -1,3 +1,4 @@
+import copy
 import importlib
 import json
 import re
@@ -32,31 +33,78 @@ def load_fixture(fixture_name: str) -> list[dict[str, Any]] | dict[str, Any]:
 
 
 async def insert_test_data(
-    store: BaseStore, library_model: type[_LibType], book_model: type[_BookType]
+    store: BaseStore,
+    library_model: type[_LibType],
+    book_model: type[_BookType],
+    is_book_embedded: bool = False,
 ) -> tuple[list[_LibType], list[_BookType]]:
     """Insert data in the database before tests
 
     Args:
         store: the store to insert test data in
-        library_model: the model class for the RedisLibrary
-        book_model: the model class for the RedisBook
+        library_model: the model class for the Library
+        book_model: the model class for the Book
+        is_book_embedded: whether the book is embedded or not
 
     Returns:
         the inserted data as a tuple of libraries, books
     """
     library_data = load_fixture("libraries.json")
     book_data = load_fixture("books.json")
-
     await store.register([library_model, book_model])
+
+    if is_book_embedded:
+        library_data = _embed_test_books(book_model, libs=library_data, books=book_data)
+        libraries = await store.insert(library_model, library_data)
+        return libraries, []
+
     libraries = await store.insert(library_model, library_data)
-
-    book_data = [
-        book_model(library_id=_get_id(libraries[idx % 2]), **data)
-        for idx, data in enumerate(book_data)
-    ]
+    book_data = _attach_test_books(book_model, books=book_data, libs=libraries)
     books = await store.insert(book_model, book_data)
-
     return libraries, books
+
+
+def _embed_test_books(
+    model: type[_BookType], libs: list[dict], books: list[dict]
+) -> list[dict]:
+    """Embeds the books into the libraries
+
+    Args:
+        model: the model for the books
+        libs: the list of library dicts
+        books: the list of book dicts
+
+    Returns:
+        the list of library dicts with the books embedded
+    """
+    libs_copy = copy.deepcopy(libs)
+
+    for idx, data in enumerate(books):
+        try:
+            libs_copy[idx % 2]["books"].append(model(**data))
+        except KeyError:
+            libs_copy[idx % 2]["books"] = [model(**data)]
+
+    return libs_copy
+
+
+def _attach_test_books(
+    model: type[_BookType], books: list[dict], libs: list[_LibType]
+) -> list[_BookType]:
+    """Attaches test books to libraries in a predetermined format
+
+    Args:
+        model: the model for the books
+        books: the list of records to insert
+        libs: the list of library instances to attach the books to
+
+    Returns:
+        the attached books
+    """
+    return [
+        model(library_id=_get_id(libs[idx % 2]), **data)
+        for idx, data in enumerate(books)
+    ]
 
 
 def _get_id(lib: _LibType) -> PydanticObjectId | int | str:

@@ -18,6 +18,7 @@ from ._compat import (
     WriteRules,
     init_beanie,
 )
+from ._field import get_field_definitions
 
 _T = TypeVar("_T", bound=Document)
 _Filter = Mapping[str, Any] | bool
@@ -76,6 +77,7 @@ class MongoStore(BaseStore):
         self,
         model: type[_T],
         *filters: _Filter,
+        query: _Filter | None = None,
         skip: int = 0,
         limit: int | None = None,
         sort: None | str | list[tuple[str, SortDirection]] = None,
@@ -88,8 +90,12 @@ class MongoStore(BaseStore):
         nesting_depths_per_field: dict[str, int] | None = None,
         **pymongo_kwargs: Any,
     ) -> list[_T]:
+        all_filters = filters
+        if query:
+            all_filters = [*all_filters, query]
+
         return await model.find(
-            *filters,
+            *all_filters,
             skip=skip,
             limit=limit,
             session=session,
@@ -106,6 +112,7 @@ class MongoStore(BaseStore):
         self,
         model: type[_T],
         *filters: _Filter,
+        query: _Filter | None = None,
         updates: dict | None = None,
         session: AsyncIOMotorClientSession | None = None,
         ignore_cache: bool = False,
@@ -121,10 +128,14 @@ class MongoStore(BaseStore):
         if updates is None:
             updates = {}
 
+        all_filters = filters
+        if query:
+            all_filters = [*all_filters, query]
+
         mongo_updates = _to_mongo_updates(updates)
 
         cursor = model.find(
-            *filters,
+            *all_filters,
             session=session,
             ignore_cache=ignore_cache,
             fetch_links=fetch_links,
@@ -144,6 +155,7 @@ class MongoStore(BaseStore):
         self,
         model: type[_T],
         *filters: _Filter,
+        query: _Filter | None = None,
         session: AsyncIOMotorClientSession | None = None,
         ignore_cache: bool = False,
         fetch_links: bool = False,
@@ -154,8 +166,11 @@ class MongoStore(BaseStore):
         bulk_writer: BulkWriter | None = None,
         **pymongo_kwargs: Any,
     ) -> list[_T]:
+        all_filters = filters
+        if query:
+            all_filters = [*all_filters, query]
         cursor = model.find(
-            *filters,
+            *all_filters,
             session=session,
             ignore_cache=ignore_cache,
             fetch_links=fetch_links,
@@ -170,7 +185,12 @@ class MongoStore(BaseStore):
         return deleted_items
 
 
-def MongoModel(name: str, schema: type[ModelT], /) -> type[Document]:
+def MongoModel(
+    name: str,
+    schema: type[ModelT],
+    /,
+    embedded_models: dict[str, type[BaseModel] | type[list[BaseModel]]] = None,
+) -> type[Document]:
     """Creates a new Mongo Model for the given schema
 
     A new model can be defined by::
@@ -180,22 +200,21 @@ def MongoModel(name: str, schema: type[ModelT], /) -> type[Document]:
     Args:
         name: the name of the model
         schema: the schema from which the model is to be made
+        embedded_models: a dict of embedded models of <field name>: annotation
 
     Returns:
         a Mongo model class with the given name
     """
+    fields = get_field_definitions(
+        schema, embedded_models=embedded_models, is_for_mongo=True
+    )
+
     return create_model(
         name,
         __doc__=schema.__doc__,
         __slots__=schema.__slots__,
-        __base__=(
-            Document,
-            schema,
-        ),
-        **{
-            field_name: (field.annotation, field)
-            for field_name, field in schema.model_fields.items()
-        },
+        __base__=(Document,),
+        **fields,
     )
 
 

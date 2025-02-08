@@ -40,6 +40,7 @@ sql imports; and their default if sqlmodel is missing
 """
 try:
     from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.orm import RelationshipProperty
     from sqlalchemy.sql._typing import (
         _ColumnExpressionArgument,
         _ColumnExpressionOrStrLabelArgument,
@@ -51,17 +52,18 @@ try:
     from sqlmodel.main import Column
     from sqlmodel.main import Field as _SQLField
     from sqlmodel.main import FieldInfo as _SqlFieldInfo
-    from sqlmodel.main import NoArgAnyCallable, OnDeleteType, Relationship
+    from sqlmodel.main import NoArgAnyCallable, OnDeleteType
+    from sqlmodel.main import RelationshipInfo as _RelationshipInfo
 except ImportError:
+    from typing import Mapping, Optional, Sequence
     from typing import Set as _ColumnExpressionArgument
     from typing import Set as _ColumnExpressionOrStrLabelArgument
+    from typing import Union
 
     from pydantic import BaseModel as _SQLModel
-    from pydantic.fields import Field as Relationship
+    from pydantic._internal._repr import Representation
     from pydantic.fields import Field as _SQLField
     from pydantic.fields import FieldInfo as _FieldInfo
-
-    class _SqlFieldInfo(_FieldInfo): ...
 
     post_init_field_info = lambda b: b
     NoArgAnyCallable = Callable[[], Any]
@@ -70,6 +72,40 @@ except ImportError:
     create_async_engine = lambda *a, **k: dict(**k)
     delete = insert = select = update = create_async_engine
     AsyncSession = Any
+    RelationshipProperty = Any
+
+    class _SqlFieldInfo(_FieldInfo): ...
+
+    class _RelationshipInfo(Representation):
+        def __init__(
+            self,
+            *,
+            back_populates: Optional[str] = None,
+            cascade_delete: Optional[bool] = False,
+            passive_deletes: Optional[Union[bool, Literal["all"]]] = False,
+            link_model: Optional[Any] = None,
+            sa_relationship: Optional[RelationshipProperty] = None,  # type: ignore
+            sa_relationship_args: Optional[Sequence[Any]] = None,
+            sa_relationship_kwargs: Optional[Mapping[str, Any]] = None,
+        ) -> None:
+            if sa_relationship is not None:
+                if sa_relationship_args is not None:
+                    raise RuntimeError(
+                        "Passing sa_relationship_args is not supported when "
+                        "also passing a sa_relationship"
+                    )
+                if sa_relationship_kwargs is not None:
+                    raise RuntimeError(
+                        "Passing sa_relationship_kwargs is not supported when "
+                        "also passing a sa_relationship"
+                    )
+            self.back_populates = back_populates
+            self.cascade_delete = cascade_delete
+            self.passive_deletes = passive_deletes
+            self.link_model = link_model
+            self.sa_relationship = sa_relationship
+            self.sa_relationship_args = sa_relationship_args
+            self.sa_relationship_kwargs = sa_relationship_kwargs
 
 
 """

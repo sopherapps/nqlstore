@@ -1,16 +1,17 @@
-from typing import Generic, TypeVar
-
 import pytest
 import pytest_asyncio
 from pydantic import BaseModel
 
 from nqlstore import (
+    EmbeddedJsonModel,
     Field,
     HashModel,
+    JsonModel,
     MongoModel,
     MongoStore,
     PydanticObjectId,
     RedisStore,
+    Relationship,
     SQLModel,
     SQLStore,
 )
@@ -18,44 +19,52 @@ from nqlstore.query.parsers import QueryParser
 
 from .utils import get_regex_test_params, insert_test_data, is_lib_installed
 
-_T = TypeVar("_T")
-
 
 class Library(BaseModel):
     address: str = Field(index=True, full_text_search=True)
     name: str = Field(index=True, full_text_search=True)
+    books: list["Book"] = Relationship(back_populates="library", default=[])
 
     class Settings:
         name = "libraries"
 
 
-class Book(BaseModel, Generic[_T]):
+class Book(BaseModel):
     title: str = Field(index=True)
-    library_id: _T | None = Field(default=None, foreign_key="sqllibrary.id")
-
-    class Settings:
-        name = "books"
+    library_id: int | None = Field(
+        default=None,
+        foreign_key="sqllibrary.id",
+        disable_on_redis=True,
+        disable_on_mongo=True,
+    )
+    library: Library | None = Relationship(
+        back_populates="books", disable_on_redis=True, disable_on_mongo=True
+    )
 
 
 # default models
 SqlLibrary = Library
-SqlBook = Book[int]
+SqlBook = Book
 MongoLibrary = Library
-MongoBook = Book[str]
 RedisLibrary = Library
-RedisBook = Book[str]
+RedisBook = Book
 
 if is_lib_installed("sqlmodel"):
-    SqlLibrary = SQLModel("SqlLibrary", Library)
-    SqlBook = SQLModel("SqlBook", Book[int])
+    SqlLibrary = SQLModel(
+        "SqlLibrary", Library, relationships={"books": list["SqlBook"]}
+    )
+    SqlBook = SQLModel("SqlBook", Book, relationships={"library": SqlLibrary | None})
 
 if is_lib_installed("beanie"):
-    MongoLibrary = MongoModel("MongoLibrary", Library)
-    MongoBook = MongoModel("MongoBook", Book[PydanticObjectId])
+    MongoLibrary = MongoModel(
+        "MongoLibrary", Library, embedded_models={"books": list[Book]}
+    )
 
 if is_lib_installed("redis_om"):
-    RedisLibrary = HashModel("RedisLibrary", Library)
-    RedisBook = HashModel("RedisBook", Book[str])
+    RedisBook = EmbeddedJsonModel("RedisBook", Book)
+    RedisLibrary = JsonModel(
+        "RedisLibrary", Library, embedded_models={"books": list[RedisBook]}
+    )
 
 
 @pytest.fixture
@@ -99,7 +108,10 @@ def redis_store():
 async def inserted_redis_libs(redis_store):
     """The libraries inserted in the redis store"""
     inserted_libs, _ = await insert_test_data(
-        redis_store, library_model=RedisLibrary, book_model=RedisBook
+        redis_store,
+        library_model=RedisLibrary,
+        book_model=RedisBook,
+        is_book_embedded=True,
     )
     yield inserted_libs
 
@@ -116,7 +128,7 @@ def regex_params_redis(inserted_redis_libs):
 async def inserted_mongo_libs(mongo_store):
     """The libraries inserted in the mongodb store"""
     inserted_libs, _ = await insert_test_data(
-        mongo_store, library_model=MongoLibrary, book_model=MongoBook
+        mongo_store, library_model=MongoLibrary, book_model=Book, is_book_embedded=True
     )
     yield inserted_libs
 

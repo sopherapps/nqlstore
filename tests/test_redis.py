@@ -26,6 +26,22 @@ async def test_find_native(redis_store, inserted_redis_libs):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
+async def test_find_dot_notation(redis_store, inserted_redis_libs):
+    """Find should find the items that match the filter with embedded objects"""
+    wanted_titles = ["Belljar", "Benediction man"]
+    got = await redis_store.find(
+        RedisLibrary, query={"books.title": {"$in": wanted_titles}}
+    )
+    expected = [
+        v
+        for v in inserted_redis_libs
+        if any([bk.title in wanted_titles for bk in v.books])
+    ]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_find_mongo_style(redis_store, inserted_redis_libs):
     """Find should return the items that match the mongodb-like filter"""
     got = await redis_store.find(

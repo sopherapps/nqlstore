@@ -41,6 +41,22 @@ async def test_find_mongo_style(sql_store, inserted_sql_libs):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
+async def test_find_dot_notation(sql_store, inserted_sql_libs):
+    """Find should find the items that match the filter with embedded objects"""
+    wanted_titles = ["Belljar", "Benediction man"]
+    got = await sql_store.find(
+        SqlLibrary, query={"books.title": {"$in": wanted_titles}}
+    )
+    expected = [
+        v
+        for v in inserted_sql_libs
+        if any([bk.title in wanted_titles for bk in v.books])
+    ]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 @pytest.mark.parametrize("index", range(4))
 async def test_regex_find_mongo_style(sql_store, regex_params_sql, index):
     """Find with regex should find the items that match the regex"""

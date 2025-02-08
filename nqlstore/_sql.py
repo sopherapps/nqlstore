@@ -1,6 +1,6 @@
 """SQL implementation"""
 
-from typing import Any, Iterable, TypeVar
+from typing import Any, Iterable, TypeVar, Union
 
 from pydantic import create_model
 from pydantic.main import ModelT
@@ -17,7 +17,7 @@ from ._compat import (
     select,
     update,
 )
-from ._field import Field
+from ._field import Field, get_field_definitions
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
@@ -125,7 +125,12 @@ class _SQLModelMeta(_SQLModel):
     id: int | None = Field(default=None, primary_key=True)
 
 
-def SQLModel(name: str, schema: type[ModelT], /) -> type[_SQLModel]:
+def SQLModel(
+    name: str,
+    schema: type[ModelT],
+    /,
+    relationships: dict[str, type[Any] | type[Union[Any]]] = None,
+) -> type[_SQLModelMeta]:
     """Creates a new SQLModel for the given schema for redis
 
     A new model can be defined by::
@@ -135,22 +140,19 @@ def SQLModel(name: str, schema: type[ModelT], /) -> type[_SQLModel]:
     Args:
         name: the name of the model
         schema: the schema from which the model is to be made
+        relationships: a map of <name>:annotation for all relationships
 
     Returns:
         a SQLModel model class with the given name
     """
+    fields = get_field_definitions(schema, relationships=relationships, is_for_sql=True)
+
     # FIXME: Handle scenario where a pk is defined
     return create_model(
         name,
         __doc__=schema.__doc__,
         __slots__=schema.__slots__,
         __cls_kwargs__={"table": True},
-        __base__=(
-            _SQLModelMeta,
-            schema,
-        ),
-        **{
-            field_name: (field.annotation, field)
-            for field_name, field in schema.model_fields.items()
-        },
+        __base__=(_SQLModelMeta,),
+        **fields,
     )

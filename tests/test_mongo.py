@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from tests.conftest import MongoBook, MongoLibrary
+from tests.conftest import MongoLibrary
 from tests.utils import is_lib_installed, load_fixture
 
 _LIBRARY_DATA = load_fixture("libraries.json")
@@ -12,8 +12,23 @@ _LIBRARY_DATA = load_fixture("libraries.json")
 @pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def test_find(mongo_store, inserted_mongo_libs):
     """Find should find the items that match the filter"""
-    got = await mongo_store.find(MongoLibrary, {}, skip=1)
+    got = await mongo_store.find(MongoLibrary, {}, query={}, skip=1)
     expected = [v for idx, v in enumerate(inserted_mongo_libs) if idx >= 1]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
+async def test_find_dot_notation(mongo_store, inserted_mongo_libs):
+    """Find should find the items that match the filter with embedded objects"""
+    got = await mongo_store.find(
+        MongoLibrary, {"books.title": {"$regex": "^be.*", "$options": "i"}}
+    )
+    expected = [
+        v
+        for v in inserted_mongo_libs
+        if any([bk.title.lower().startswith("be") for bk in v.books])
+    ]
     assert got == expected
 
 
@@ -31,7 +46,7 @@ async def test_regex_find(mongo_store, regex_params_mongo, index):
 @pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def test_create(mongo_store):
     """Create should add many items to the mongo database"""
-    await mongo_store.register([MongoLibrary, MongoBook])
+    await mongo_store.register([MongoLibrary])
     got = await mongo_store.insert(MongoLibrary, _LIBRARY_DATA)
     got = [v.dict(exclude={"id"}) for v in got]
     assert got == _LIBRARY_DATA
