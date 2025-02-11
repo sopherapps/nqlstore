@@ -71,8 +71,8 @@ class Library(BaseModel):
 
 class Book(BaseModel):
     title: str = Field(index=True)
-    library_id: int | None = Field(default=None, foreign_key="sqllibrary.id")
-    library: Library | None = Relationship(back_populates="books")
+    library_id: int | None = Field(default=None, foreign_key="sqllibrary.id", disable_on_redis=True, disable_on_mongo=True)
+    library: Library | None = Relationship(back_populates="books", disable_on_redis=True, disable_on_mongo=True)
 ```
 
 ### Initialize your store and its models
@@ -91,8 +91,11 @@ from .schemas import Book, Library
 
 
 # Define models specific to SQL.
-SqlLibrary = SQLModel("SqlLibrary", Library)
-SqlBook = SQLModel("SqlBook", Book[int])
+SqlLibrary = SQLModel(
+        "SqlLibrary", Library, relationships={"books": list["SqlBook"]}
+    )
+SqlBook = SQLModel("SqlBook", Book, relationships={"library": SqlLibrary | None})
+
 
 
 async def main():
@@ -115,8 +118,8 @@ from nqlstore import RedisStore, EmbeddedJsonModel, JsonModel
 from .schemas import Book, Library
 
 # Define models specific to redis.
-RedisBook = EmbeddedJsonModel("RedisBook", Book[str])
-RedisLibrary = JsonModel("RedisLibrary", Library, embedded_models=[(Library.books, RedisBook)])
+RedisBook = EmbeddedJsonModel("RedisBook", Book)
+RedisLibrary = JsonModel("RedisLibrary", Library, embedded_models={"books": list[RedisBook]})
 
 async def main():
   redis_store = RedisStore(uri="rediss://username:password@localhost:6379/0")
@@ -131,17 +134,19 @@ async def main():
 ```python
 # main.py
 
-from nqlstore import MongoStore, MongoModel
-from .schemas import Library
+from nqlstore import MongoStore, MongoModel, EmbeddedMongoModel
+from .schemas import Library, Book
 
 # Define models specific to MongoDB.
-MongoLibrary = MongoModel("MongoLibrary", Library)
+MongoBook = EmbeddedMongoModel("MongoBook", Book)
+MongoLibrary = MongoModel("MongoLibrary", Library, embedded_models={"books": list[MongoBook]})
 
 
 async def main():
   mongo_store = MongoStore(uri="mongodb://localhost:27017", database="testing")
   await mongo_store.register([
     MongoLibrary,
+    MongoBook,
   ])
 
 ```

@@ -4,12 +4,11 @@ from pydantic import BaseModel
 
 from nqlstore import (
     EmbeddedJsonModel,
+    EmbeddedMongoModel,
     Field,
-    HashModel,
     JsonModel,
     MongoModel,
     MongoStore,
-    PydanticObjectId,
     RedisStore,
     Relationship,
     SQLModel,
@@ -46,6 +45,7 @@ class Book(BaseModel):
 SqlLibrary = Library
 SqlBook = Book
 MongoLibrary = Library
+MongoBook = Book
 RedisLibrary = Library
 RedisBook = Book
 
@@ -56,8 +56,9 @@ if is_lib_installed("sqlmodel"):
     SqlBook = SQLModel("SqlBook", Book, relationships={"library": SqlLibrary | None})
 
 if is_lib_installed("beanie"):
+    MongoBook = EmbeddedMongoModel("MongoBook", Book)
     MongoLibrary = MongoModel(
-        "MongoLibrary", Library, embedded_models={"books": list[Book]}
+        "MongoLibrary", Library, embedded_models={"books": list[MongoBook]}
     )
 
 if is_lib_installed("redis_om"):
@@ -128,7 +129,10 @@ def regex_params_redis(inserted_redis_libs):
 async def inserted_mongo_libs(mongo_store):
     """The libraries inserted in the mongodb store"""
     inserted_libs, _ = await insert_test_data(
-        mongo_store, library_model=MongoLibrary, book_model=Book, is_book_embedded=True
+        mongo_store,
+        library_model=MongoLibrary,
+        book_model=MongoBook,
+        is_book_embedded=True,
     )
     yield inserted_libs
 

@@ -1,11 +1,24 @@
 import re
 
 import pytest
+from redis.commands.search.document import Document
 
-from tests.conftest import MongoLibrary
+from tests.conftest import MongoBook, MongoLibrary
 from tests.utils import is_lib_installed, load_fixture
 
 _LIBRARY_DATA = load_fixture("libraries.json")
+_BOOK_DATA = load_fixture("books.json")
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
+async def test_register(mongo_store, inserted_mongo_libs):
+    """Register ensures that the MongoLibrary is properly initialized"""
+    assert (
+        MongoLibrary._document_settings.motor_collection.full_name
+        == "testing.libraries"
+    )
+    assert not issubclass(MongoBook, Document)
 
 
 @pytest.mark.asyncio
@@ -47,9 +60,12 @@ async def test_regex_find(mongo_store, regex_params_mongo, index):
 async def test_create(mongo_store):
     """Create should add many items to the mongo database"""
     await mongo_store.register([MongoLibrary])
-    got = await mongo_store.insert(MongoLibrary, _LIBRARY_DATA)
+    books = [MongoBook(**v) for v in _BOOK_DATA]
+    lib_data = [{**v, "books": [*books]} for v in _LIBRARY_DATA]
+    got = await mongo_store.insert(MongoLibrary, lib_data)
     got = [v.dict(exclude={"id"}) for v in got]
-    assert got == _LIBRARY_DATA
+    expected = [{**v, "books": [*_BOOK_DATA]} for v in _LIBRARY_DATA]
+    assert got == expected
 
 
 @pytest.mark.asyncio

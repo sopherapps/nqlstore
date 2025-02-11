@@ -4,6 +4,7 @@ from tests.conftest import RedisBook, RedisLibrary
 from tests.utils import is_lib_installed, load_fixture
 
 _LIBRARY_DATA = load_fixture("libraries.json")
+_BOOK_DATA = load_fixture("books.json")
 _TEST_ADDRESS = "Hoima, Uganda"
 
 
@@ -92,9 +93,14 @@ async def test_find_hybrid(redis_store, inserted_redis_libs):
 async def test_create(redis_store):
     """Create should add many items to the sql database"""
     await redis_store.register([RedisLibrary, RedisBook])
-    got = await redis_store.insert(RedisLibrary, _LIBRARY_DATA)
-    got = [v.dict(exclude={"pk"}) for v in got]
-    assert got == _LIBRARY_DATA
+    books = [RedisBook(**v) for v in _BOOK_DATA]
+    lib_data = [{**v, "books": [*books]} for v in _LIBRARY_DATA]
+    got = await redis_store.insert(RedisLibrary, lib_data)
+    got = [v.model_dump(exclude={"pk"}) for v in got]
+    expected = [
+        {**v, "books": [bk.model_dump() for bk in books]} for v in _LIBRARY_DATA
+    ]
+    assert got == expected
 
 
 @pytest.mark.asyncio

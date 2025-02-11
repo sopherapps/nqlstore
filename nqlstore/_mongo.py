@@ -48,9 +48,24 @@ class MongoStore(BaseStore):
         multiprocessing_mode: bool = False,
         skip_indexes: bool = False,
     ):
+        """Registers the given models and runs any initialization steps
+
+        Args:
+            models: the list of Model's this store is to contain
+            allow_index_dropping: if index dropping is allowed.
+                Default False
+            recreate_views: if views should be recreated. Default False
+            multiprocessing_mode: bool - if multiprocessing mode is on
+                it will patch the motor client to use process's event loop. Default False
+            skip_indexes: if you want to skip working with the indexes.
+                Default False
+        """
+        document_models = [
+            cls for cls in models if not issubclass(cls, _EmbeddedMongoModel)
+        ]
         await init_beanie(
             self._db,
-            document_models=models,
+            document_models=document_models,
             allow_index_dropping=allow_index_dropping,
             recreate_views=recreate_views,
             multiprocessing_mode=multiprocessing_mode,
@@ -185,17 +200,28 @@ class MongoStore(BaseStore):
         return deleted_items
 
 
+class _EmbeddedMongoModel(BaseModel):
+    """An embedded model for mongo database
+
+    It is never created in the database as a collection
+    """
+
+    pass
+
+
 def MongoModel(
     name: str,
     schema: type[ModelT],
     /,
-    embedded_models: dict[str, type[BaseModel] | type[list[BaseModel]]] = None,
+    embedded_models: dict[
+        str, type[_EmbeddedMongoModel] | type[list[_EmbeddedMongoModel]]
+    ] = None,
 ) -> type[Document]:
     """Creates a new Mongo Model for the given schema
 
     A new model can be defined by::
 
-        Model = MongoModel("Model", Schema)
+        Model = MongoModel("Model", Schema, embedded_models = {"address": Address})
 
     Args:
         name: the name of the model
@@ -209,11 +235,49 @@ def MongoModel(
         schema, embedded_models=embedded_models, is_for_mongo=True
     )
 
-    return create_model(
+    model = create_model(
         name,
         __doc__=schema.__doc__,
         __slots__=schema.__slots__,
         __base__=(Document,),
+        **fields,
+    )
+
+    _copy_settings(dst=model, src=schema)
+    return model
+
+
+def EmbeddedMongoModel(
+    name: str,
+    schema: type[ModelT],
+    /,
+    embedded_models: dict[
+        str, type[_EmbeddedMongoModel] | type[list[_EmbeddedMongoModel]]
+    ] = None,
+) -> type[_EmbeddedMongoModel]:
+    """Creates a new embedded Mongo Model for the given schema
+
+    A new model can be defined by::
+
+        Model = EmbeddedMongoModel("Model", Schema)
+
+    Args:
+        name: the name of the model
+        schema: the schema from which the model is to be made
+        embedded_models: a dict of embedded models of <field name>: annotation
+
+    Returns:
+        an embedded Mongo model class with the given name
+    """
+    fields = get_field_definitions(
+        schema, embedded_models=embedded_models, is_for_mongo=True
+    )
+
+    return create_model(
+        name,
+        __doc__=schema.__doc__,
+        __slots__=schema.__slots__,
+        __base__=(_EmbeddedMongoModel,),
         **fields,
     )
 
@@ -238,3 +302,17 @@ def _to_mongo_updates(updates: dict[str, Any]) -> dict[str, Any]:
             return updates
 
     return {"$set": updates}
+
+
+def _copy_settings(dst: type[Document], src: type[ModelT]):
+    """Copies settings from source to destination
+
+    Args:
+        dst: the model to receive the settings
+        src: the model or schema that contains the settings
+    """
+    try:
+        settings_cls = getattr(src, "Settings")
+        setattr(dst, "Settings", settings_cls)
+    except AttributeError:
+        pass
