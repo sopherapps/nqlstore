@@ -5,7 +5,7 @@ from typing import Any, Iterable, TypeVar, Union
 from pydantic import create_model
 from pydantic.main import ModelT
 from sqlalchemy import inspect
-from sqlalchemy.orm import joinedload, subqueryload
+from sqlalchemy.orm import joinedload
 
 from ._base import BaseStore
 from ._compat import (
@@ -69,9 +69,7 @@ class SQLStore(BaseStore):
 
             # eagerly load all relationships so that no validation errors occur due
             # to missing session if there is an attempt to load them lazily later
-            rel_options = [
-                subqueryload(v) for v in inspect(model).relationships.values()
-            ]
+            rel_options = [joinedload(v) for v in inspect(model).relationships.values()]
 
             cursor = await session.stream_scalars(
                 select(model)
@@ -81,7 +79,7 @@ class SQLStore(BaseStore):
                 .order_by(*sort)
                 .options(*rel_options)
             )
-            results = await cursor.all()
+            results = await cursor.unique().all()
             return list(results)
 
     async def update(
