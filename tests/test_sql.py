@@ -47,11 +47,7 @@ async def test_find_dot_notation(sql_store, inserted_sql_libs):
     got = await sql_store.find(
         SqlLibrary, query={"books.title": {"$in": wanted_titles}}
     )
-    expected = [
-        v
-        for v in inserted_sql_libs
-        if any([bk.title in wanted_titles for bk in v.books])
-    ]
+    expected = await sql_store.find(SqlLibrary, SqlBook.title.in_(wanted_titles))
     assert got == expected
 
 

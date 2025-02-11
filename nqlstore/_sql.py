@@ -4,6 +4,8 @@ from typing import Any, Iterable, TypeVar, Union
 
 from pydantic import create_model
 from pydantic.main import ModelT
+from sqlalchemy import inspect
+from sqlalchemy.orm import joinedload, subqueryload
 
 from ._base import BaseStore
 from ._compat import (
@@ -65,12 +67,19 @@ class SQLStore(BaseStore):
             if query:
                 nql_filters = self._parser.to_sql(model, query=query)
 
+            # eagerly load all relationships so that no validation errors occur due
+            # to missing session if there is an attempt to load them lazily later
+            rel_options = [
+                subqueryload(v) for v in inspect(model).relationships.values()
+            ]
+
             cursor = await session.stream_scalars(
                 select(model)
                 .where(*filters, *nql_filters)
                 .limit(limit)
                 .offset(skip)
                 .order_by(*sort)
+                .options(*rel_options)
             )
             results = await cursor.all()
             return list(results)
