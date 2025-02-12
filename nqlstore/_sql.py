@@ -4,8 +4,15 @@ from typing import Any, Iterable, TypeVar, Union
 
 from pydantic import create_model
 from pydantic.main import ModelT
-from sqlalchemy import inspect
-from sqlalchemy.orm import joinedload
+from sqlalchemy import Column, Executable, Table, inspect
+from sqlalchemy.orm import (
+    InspectionAttr,
+    InstrumentedAttribute,
+    RelationshipProperty,
+    contains_eager,
+    joinedload,
+    subqueryload,
+)
 
 from ._base import BaseStore
 from ._compat import (
@@ -19,11 +26,12 @@ from ._compat import (
     select,
     update,
 )
-from ._field import Field, get_field_definitions
+from ._field import Field, FieldInfo, RelationshipInfo, get_field_definitions
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
 _T = TypeVar("_T", bound=_SQLModel)
+_T_stmt = TypeVar("_T_stmt", bound=Executable)
 _Filter = _ColumnExpressionArgument[bool] | bool
 
 
@@ -63,23 +71,31 @@ class SQLStore(BaseStore):
         **kwargs,
     ) -> list[_T]:
         async with AsyncSession(self._engine) as session:
-            nql_filters = ()
             if query:
-                nql_filters = self._parser.to_sql(model, query=query)
+                filters = (*filters, *self._parser.to_sql(model, query=query))
+
+            relations = _get_relations(model)
 
             # eagerly load all relationships so that no validation errors occur due
             # to missing session if there is an attempt to load them lazily later
-            rel_options = [joinedload(v) for v in inspect(model).relationships.values()]
+            options = [subqueryload(v) for v in relations]
 
-            cursor = await session.stream_scalars(
-                select(model)
-                .where(*filters, *nql_filters)
+            stmt = (
+                _apply_joins(
+                    model,
+                    statement=select(model),
+                    relations=relations,
+                    filters=filters,
+                )
+                .options(*options)
+                .where(*filters)
                 .limit(limit)
                 .offset(skip)
                 .order_by(*sort)
-                .options(*rel_options)
             )
-            results = await cursor.unique().all()
+
+            cursor = await session.stream_scalars(stmt)
+            results = await cursor.all()
             return list(results)
 
     async def update(
@@ -91,13 +107,12 @@ class SQLStore(BaseStore):
         **kwargs,
     ) -> list[_T]:
         async with AsyncSession(self._engine) as session:
-            nql_filters = ()
             if query:
-                nql_filters = self._parser.to_sql(model, query=query)
+                filters = (*filters, *self._parser.to_sql(model, query=query))
 
             stmt = (
                 update(model)
-                .where(*filters, *nql_filters)
+                .where(*filters)
                 .values(**updates)
                 .returning(model.__table__)
             )
@@ -163,3 +178,73 @@ def SQLModel(
         __base__=(_SQLModelMeta,),
         **fields,
     )
+
+
+def _get_relations(model: type[_SQLModel]):
+    """Gets all the relational fields of the given model
+
+    Args:
+        model: the SQL model to inspect
+
+    Returns:
+        list of Fields that have associated relationships
+    """
+    return [
+        v
+        for v in model.__mapper__.all_orm_descriptors.values()
+        if isinstance(v.property, RelationshipProperty)
+    ]
+
+
+def _get_filtered_tables(filters: tuple[_Filter, ...]) -> list[Table]:
+    """Retrieves the tables that have been referenced in the filters
+
+    Args:
+        filters: the tuple of filters to inspect
+
+    Returns:
+        the list of Table instances referenced in the filters
+    """
+    return [
+        getattr(v, "table")
+        for filter_ in filters
+        for v in filter_.get_children()
+        if isinstance(v, Column)
+    ]
+
+
+def _apply_joins(
+    model: type[_SQLModel],
+    statement: _T_stmt,
+    relations: list[InstrumentedAttribute[Any]],
+    filters: tuple[_Filter, ...],
+) -> _T_stmt:
+    """Adds join statements to the statement given the relations and the filters
+
+    Note: this changes the stmt in-place
+
+    Args:
+        model: the SQLModel class for the given query/mutation
+        statement: the executable statement to execute on the session
+        relations: the list of relationship fields that this model has
+        filters: the tuple of expressions that are being used to match the records in database
+
+    Returns:
+        the executable statement with the joins applied
+    """
+    filtered_tables = _get_filtered_tables(filters)
+    filtered_relations = [
+        rel for rel in relations if rel.property.target in filtered_tables
+    ]
+
+    # Note that we need to treat relations that are referenced in the filters
+    # differently from those that are not. This is because filtering basing on a relationship
+    # requires the use of an inner join. Yet an inner join automatically excludes rows
+    # that are have null for a given relationship.
+    #
+    # An outer join on the other hand would just return all the rows in the left table.
+    # We thus need to do an inner join on tables that are being filtered.
+    for rel in filtered_relations:
+        statement = statement.join_from(model, rel)
+
+    return statement

@@ -61,7 +61,31 @@ async def insert_test_data(
     libraries = await store.insert(library_model, library_data)
     book_data = _attach_test_books(book_model, books=book_data, libs=libraries)
     books = await store.insert(book_model, book_data)
+    libraries = _populate_libs_with_books(libs=libraries, books=books)
+
     return libraries, books
+
+
+def _populate_libs_with_books(
+    libs: list[_LibType], books: list[_BookType]
+) -> list[_LibType]:
+    """Gets the list of libraries with their book lists updated to respective books
+
+    Args:
+        libs: the list of libraries
+        books: the list of books
+
+    Returns:
+        list of libraries with their "books" property populated
+    """
+    books_per_lib = {}
+    for bk in books:
+        lib_books = books_per_lib.setdefault(bk.library_id, [])
+        lib_books.append(bk)
+
+    return [
+        lib.model_copy(update={"books": books_per_lib.get(lib.id, [])}) for lib in libs
+    ]
 
 
 def _embed_test_books(

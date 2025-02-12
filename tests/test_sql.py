@@ -45,13 +45,12 @@ async def test_find_dot_notation(sql_store, inserted_sql_libs):
     """Find should find the items that match the filter with embedded objects"""
     wanted_titles = ["Belljar", "Benediction man"]
     matches_query = lambda v: any(bk.title in wanted_titles for bk in v.books)
-    all_libs = await sql_store.find(SqlLibrary, query={})
 
     got = await sql_store.find(
         SqlLibrary, query={"books.title": {"$in": wanted_titles}}
     )
 
-    expected = [record.model_copy() for record in all_libs if matches_query(record)]
+    expected = [v for v in inserted_sql_libs if matches_query(v)]
     assert _ordered(got) == _ordered(expected)
 
 
