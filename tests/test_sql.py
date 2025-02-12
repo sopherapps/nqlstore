@@ -198,7 +198,6 @@ async def test_update_dot_notation(sql_store, inserted_sql_libs):
     wanted_titles = ["Belljar", "Benediction man"]
     updates = {"address": "some new address"}
     matches_query = lambda v: any(bk.title in wanted_titles for bk in v.books)
-    all_libs = await sql_store.find(SqlLibrary, query={})
 
     got = await sql_store.update(
         SqlLibrary,
@@ -207,7 +206,7 @@ async def test_update_dot_notation(sql_store, inserted_sql_libs):
     )
     expected = [
         record.model_copy(update=updates)
-        for record in all_libs
+        for record in inserted_sql_libs
         if matches_query(record)
     ]
     assert _ordered(got) == _ordered(expected)
@@ -216,7 +215,7 @@ async def test_update_dot_notation(sql_store, inserted_sql_libs):
     got = await sql_store.find(SqlLibrary)
     expected = [
         (record.model_copy(update=updates) if matches_query(record) else record)
-        for record in all_libs
+        for record in inserted_sql_libs
     ]
     assert _ordered(got) == _ordered(expected)
 
@@ -307,24 +306,18 @@ async def test_delete_hybrid(sql_store, inserted_sql_libs):
 async def test_delete_dot_notation(sql_store, inserted_sql_libs):
     """Delete should delete the items that match the filter with embedded objects"""
     wanted_titles = ["Belljar", "Benediction man"]
-    updates = {"address": "some new address"}
     matches_query = lambda v: any(bk.title in wanted_titles for bk in v.books)
-    all_libs = await sql_store.find(SqlLibrary, query={})
 
     got = await sql_store.delete(
         SqlLibrary,
         query={"books.title": {"$in": wanted_titles}},
     )
-    expected = [
-        record.model_copy(update=updates)
-        for record in all_libs
-        if matches_query(record)
-    ]
+    expected = [record for record in inserted_sql_libs if matches_query(record)]
     assert _ordered(got) == _ordered(expected)
 
     # all library data in database
     got = await sql_store.find(SqlLibrary)
-    expected = [record for record in all_libs if matches_query(record)]
+    expected = [record for record in inserted_sql_libs if not matches_query(record)]
     assert _ordered(got) == _ordered(expected)
 
 
