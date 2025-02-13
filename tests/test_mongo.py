@@ -1,8 +1,8 @@
 import re
 
 import pytest
-from redis.commands.search.document import Document
 
+from nqlstore._compat import Document
 from tests.conftest import MongoBook, MongoLibrary
 from tests.utils import is_lib_installed, load_fixture
 
