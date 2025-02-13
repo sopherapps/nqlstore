@@ -4,12 +4,14 @@ from typing import Any, Iterable, TypeVar, Union
 
 from pydantic import create_model
 from pydantic.main import ModelT
-from sqlalchemy import Column, Table
-from sqlalchemy.orm import InstrumentedAttribute, RelationshipProperty, subqueryload
 
 from ._base import BaseStore
 from ._compat import (
     AsyncSession,
+    Column,
+    InstrumentedAttribute,
+    RelationshipProperty,
+    Table,
     _ColumnExpressionArgument,
     _ColumnExpressionOrStrLabelArgument,
     _SQLModel,
@@ -17,6 +19,7 @@ from ._compat import (
     delete,
     insert,
     select,
+    subqueryload,
     update,
 )
 from ._field import Field, get_field_definitions

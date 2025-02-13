@@ -39,8 +39,9 @@ except ImportError:
 sql imports; and their default if sqlmodel is missing
 """
 try:
+    from sqlalchemy import Column, Table
     from sqlalchemy.ext.asyncio import create_async_engine
-    from sqlalchemy.orm import RelationshipProperty
+    from sqlalchemy.orm import InstrumentedAttribute, RelationshipProperty, subqueryload
     from sqlalchemy.sql._typing import (
         _ColumnExpressionArgument,
         _ColumnExpressionOrStrLabelArgument,
@@ -49,13 +50,13 @@ try:
     from sqlmodel import delete, insert, select, update
     from sqlmodel._compat import post_init_field_info
     from sqlmodel.ext.asyncio.session import AsyncSession
-    from sqlmodel.main import Column
     from sqlmodel.main import Field as _SQLField
     from sqlmodel.main import FieldInfo as _SqlFieldInfo
     from sqlmodel.main import NoArgAnyCallable, OnDeleteType
     from sqlmodel.main import RelationshipInfo as _RelationshipInfo
 except ImportError:
     from typing import Mapping, Optional, Sequence
+    from typing import Set
     from typing import Set as _ColumnExpressionArgument
     from typing import Set as _ColumnExpressionOrStrLabelArgument
     from typing import Union
@@ -72,7 +73,10 @@ except ImportError:
     create_async_engine = lambda *a, **k: dict(**k)
     delete = insert = select = update = create_async_engine
     AsyncSession = Any
-    RelationshipProperty = Any
+    RelationshipProperty = Set
+    Table = Set
+    InstrumentedAttribute = Set
+    subqueryload = lambda *a, **kwargs: dict(**kwargs)
 
     class _SqlFieldInfo(_FieldInfo): ...
 
