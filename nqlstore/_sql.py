@@ -5,11 +5,7 @@ from typing import Any, Iterable, TypeVar, Union
 from pydantic import create_model
 from pydantic.main import ModelT
 from sqlalchemy import Column, Table
-from sqlalchemy.orm import (
-    InstrumentedAttribute,
-    RelationshipProperty,
-    subqueryload,
-)
+from sqlalchemy.orm import InstrumentedAttribute, RelationshipProperty, subqueryload
 
 from ._base import BaseStore
 from ._compat import (
@@ -207,7 +203,6 @@ def SQLModel(
     return create_model(
         name,
         __doc__=schema.__doc__,
-        __slots__=schema.__slots__,
         __cls_kwargs__={"table": True},
         __base__=(_SQLModelMeta,),
         **fields,
@@ -324,4 +319,4 @@ def _to_subquery_based_filters(
         subquery = subquery.join_from(model, rel)
 
     # return a filter checking model id against the returned ids
-    return [model.id.in_(subquery.where(*rel_filters).subquery())]
+    return [model.id.in_(subquery.where(*rel_filters))]

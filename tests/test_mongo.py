@@ -63,7 +63,7 @@ async def test_create(mongo_store):
     books = [MongoBook(**v) for v in _BOOK_DATA]
     lib_data = [{**v, "books": [*books]} for v in _LIBRARY_DATA]
     got = await mongo_store.insert(MongoLibrary, lib_data)
-    got = [v.dict(exclude={"id"}) for v in got]
+    got = [v.model_dump(exclude={"id"}) for v in got]
     expected = [{**v, "books": [*_BOOK_DATA]} for v in _LIBRARY_DATA]
     assert got == expected
 

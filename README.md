@@ -327,7 +327,6 @@ libraries = await redis_store.delete(
 
 ## TODO
 
-- [ ] Implement dot notation for embedded documents and arrays (i.e. relationships in SQL)
 - [ ] Add documentation site
 - [ ] Add example applications
 

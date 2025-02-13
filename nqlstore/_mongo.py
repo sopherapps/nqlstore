@@ -238,7 +238,6 @@ def MongoModel(
     model = create_model(
         name,
         __doc__=schema.__doc__,
-        __slots__=schema.__slots__,
         __base__=(Document,),
         **fields,
     )
@@ -276,7 +275,6 @@ def EmbeddedMongoModel(
     return create_model(
         name,
         __doc__=schema.__doc__,
-        __slots__=schema.__slots__,
         __base__=(_EmbeddedMongoModel,),
         **fields,
     )

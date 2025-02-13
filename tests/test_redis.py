@@ -30,14 +30,13 @@ async def test_find_native(redis_store, inserted_redis_libs):
 async def test_find_dot_notation(redis_store, inserted_redis_libs):
     """Find should find the items that match the filter with embedded objects"""
     wanted_titles = ["Belljar", "Benediction man"]
+    matches_query = lambda v: any(bk.title in wanted_titles for bk in v.books)
+
     got = await redis_store.find(
         RedisLibrary, query={"books.title": {"$in": wanted_titles}}
     )
-    expected = [
-        v
-        for v in inserted_redis_libs
-        if any([bk.title in wanted_titles for bk in v.books])
-    ]
+
+    expected = [v for v in inserted_redis_libs if matches_query(v)]
     assert got == expected
 
 
@@ -201,6 +200,35 @@ async def test_update_hybrid(redis_store, inserted_redis_libs):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
+async def test_update_dot_notation(redis_store, inserted_redis_libs):
+    """Update should update the items that match the filter with embedded objects"""
+    wanted_titles = ["Belljar", "Benediction man"]
+    updates = {"address": "some new address"}
+    matches_query = lambda v: any(bk.title in wanted_titles for bk in v.books)
+
+    got = await redis_store.update(
+        RedisLibrary,
+        query={"books.title": {"$in": wanted_titles}},
+        updates=updates,
+    )
+    expected = [
+        record.model_copy(update=updates)
+        for record in inserted_redis_libs
+        if matches_query(record)
+    ]
+    assert _sort(got) == _sort(expected)
+
+    # all library data in database
+    got = await redis_store.find(RedisLibrary)
+    expected = [
+        (record.model_copy(update=updates) if matches_query(record) else record)
+        for record in inserted_redis_libs
+    ]
+    assert _sort(got) == _sort(expected)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def test_delete_native(redis_store, inserted_redis_libs):
     """Delete should delete the items that match the native filter"""
     # in immediate response
@@ -277,6 +305,26 @@ async def test_delete_hybrid(redis_store, inserted_redis_libs):
         for v in inserted_redis_libs
         if v.address in unwanted_addresses or not v.name.lower().startswith("bu")
     ]
+    assert _sort(got) == _sort(expected)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
+async def test_delete_dot_notation(redis_store, inserted_redis_libs):
+    """Delete should delete the items that match the filter with embedded objects"""
+    wanted_titles = ["Belljar", "Benediction man"]
+    matches_query = lambda v: any(bk.title in wanted_titles for bk in v.books)
+
+    got = await redis_store.delete(
+        RedisLibrary,
+        query={"books.title": {"$in": wanted_titles}},
+    )
+    expected = [record for record in inserted_redis_libs if matches_query(record)]
+    assert _sort(got) == _sort(expected)
+
+    # all library data in database
+    got = await redis_store.find(RedisLibrary)
+    expected = [record for record in inserted_redis_libs if not matches_query(record)]
     assert _sort(got) == _sort(expected)
 
 

@@ -139,7 +139,6 @@ def HashModel(name: str, schema: type[ModelT], /) -> type[_HashModel]:
     return create_model(
         name,
         __doc__=schema.__doc__,
-        __slots__=schema.__slots__,
         __base__=(_HashModel,),
         **fields,
     )
@@ -176,7 +175,6 @@ def JsonModel(
     return create_model(
         name,
         __doc__=schema.__doc__,
-        __slots__=schema.__slots__,
         __base__=(_JsonModel,),
         **fields,
     )
@@ -202,7 +200,6 @@ def EmbeddedJsonModel(name: str, schema: type[ModelT], /) -> type[_EmbeddedJsonM
     return create_model(
         name,
         __doc__=schema.__doc__,
-        __slots__=schema.__slots__,
         __base__=(_EmbeddedJsonModel,),
         **fields,
     )
