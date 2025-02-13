@@ -41,6 +41,21 @@ async def test_find_mongo_style(sql_store, inserted_sql_libs):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
+async def test_find_dot_notation(sql_store, inserted_sql_libs):
+    """Find should find the items that match the filter with embedded objects"""
+    wanted_titles = ["Belljar", "Benediction man"]
+    matches_query = lambda v: any(bk.title in wanted_titles for bk in v.books)
+
+    got = await sql_store.find(
+        SqlLibrary, query={"books.title": {"$in": wanted_titles}}
+    )
+
+    expected = [v for v in inserted_sql_libs if matches_query(v)]
+    assert _ordered(got) == _ordered(expected)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 @pytest.mark.parametrize("index", range(4))
 async def test_regex_find_mongo_style(sql_store, regex_params_sql, index):
     """Find with regex should find the items that match the regex"""
@@ -178,6 +193,35 @@ async def test_update_hybrid(sql_store, inserted_sql_libs):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
+async def test_update_dot_notation(sql_store, inserted_sql_libs):
+    """Update should update the items that match the filter with embedded objects"""
+    wanted_titles = ["Belljar", "Benediction man"]
+    updates = {"address": "some new address"}
+    matches_query = lambda v: any(bk.title in wanted_titles for bk in v.books)
+
+    got = await sql_store.update(
+        SqlLibrary,
+        query={"books.title": {"$in": wanted_titles}},
+        updates=updates,
+    )
+    expected = [
+        record.model_copy(update=updates)
+        for record in inserted_sql_libs
+        if matches_query(record)
+    ]
+    assert _ordered(got) == _ordered(expected)
+
+    # all library data in database
+    got = await sql_store.find(SqlLibrary)
+    expected = [
+        (record.model_copy(update=updates) if matches_query(record) else record)
+        for record in inserted_sql_libs
+    ]
+    assert _ordered(got) == _ordered(expected)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 async def test_delete_native(sql_store, inserted_sql_libs):
     """Delete should delete the items that match the native filter"""
     # in immediate response
@@ -255,6 +299,26 @@ async def test_delete_hybrid(sql_store, inserted_sql_libs):
         if v.address in unwanted_addresses or not v.name.lower().startswith("bu")
     ]
     assert got == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
+async def test_delete_dot_notation(sql_store, inserted_sql_libs):
+    """Delete should delete the items that match the filter with embedded objects"""
+    wanted_titles = ["Belljar", "Benediction man"]
+    matches_query = lambda v: any(bk.title in wanted_titles for bk in v.books)
+
+    got = await sql_store.delete(
+        SqlLibrary,
+        query={"books.title": {"$in": wanted_titles}},
+    )
+    expected = [record for record in inserted_sql_libs if matches_query(record)]
+    assert _ordered(got) == _ordered(expected)
+
+    # all library data in database
+    got = await sql_store.find(SqlLibrary)
+    expected = [record for record in inserted_sql_libs if not matches_query(record)]
+    assert _ordered(got) == _ordered(expected)
 
 
 def _ordered(libs: list[SqlLibrary]) -> list[SqlLibrary]:

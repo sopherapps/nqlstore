@@ -130,10 +130,16 @@ class FieldPredicate(QueryPredicate):
         **kwargs,
     ):
         if __sql_model__:
-            self.__sql_field__ = getattr(__sql_model__, selector)
+            self.__sql_field__ = _get_sql_nested_field(
+                model=__sql_model__,
+                path=selector,
+            )
 
         if __redis_model__:
-            self.__redis_field__ = getattr(__redis_model__, selector)
+            self.__redis_field__ = _get_redis_nested_field(
+                model=__redis_model__,
+                path=selector,
+            )
 
         kwargs.pop("selector", None)
         super().__init__(selector=selector, value=None, parser=parent.parser)
@@ -748,3 +754,69 @@ def _redis_or(__filters: list[_RedisFilter]) -> _RedisFilter:
         the merged OR filter
     """
     return reduce(lambda prev, curr: prev | curr, __filters)
+
+
+def _get_sql_nested_field(model: type[_SQLModel], path: str) -> _SQLField:
+    """Retrieves the SQLField at the given path, which may or may not be dotted
+
+    Args:
+        path: the path to the field where dots signify relations; example books.title
+        model: the parent model
+
+    Returns:
+        the SQLField at the given path
+
+    Raises:
+        ValueError: no field '{path}' found on '{parent}'
+    """
+    path_segments = path.split(".")
+    current_parent = model
+
+    field = None
+    for idx, part in enumerate(path_segments):
+        field = getattr(current_parent, part)
+        try:
+            field_property = getattr(field, "property")
+            property_mapper = getattr(field_property, "mapper")
+            current_parent = getattr(property_mapper, "class_")
+        except AttributeError as exp:
+            if idx == len(path_segments) - 1:
+                break
+            raise exp
+
+    if field is None:
+        raise ValueError(f"no field '{path}' found on '{model}'")
+
+    return field
+
+
+def _get_redis_nested_field(model: type[_RedisModel], path: str) -> _RedisField:
+    """Retrieves the RedisField at the given path, which may or may not be dotted
+
+    Args:
+        path: the path to the field where dots signify relations; example books.title
+        model: the parent model
+
+    Returns:
+        the RedisField at the given path
+
+    Raises:
+        ValueError: no field '{path}' found on '{parent}'
+    """
+    path_segments = path.split(".")
+    current_parent = model
+
+    field = None
+    for idx, part in enumerate(path_segments):
+        field = getattr(current_parent, part)
+        try:
+            current_parent = field
+        except AttributeError as exp:
+            if idx == len(path_segments) - 1:
+                break
+            raise exp
+
+    if field is None:
+        raise ValueError(f"no field '{path}' found on '{model}'")
+
+    return field

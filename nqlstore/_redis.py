@@ -1,6 +1,6 @@
 """Redis implementation"""
 
-from typing import Any, Callable, Iterable, TypeVar
+from typing import Any, Callable, Iterable, Type, TypeVar
 
 from pydantic.main import ModelT, create_model
 
@@ -17,6 +17,7 @@ from ._compat import (
     get_redis_connection,
     verify_pipeline_response,
 )
+from ._field import get_field_definitions
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
@@ -132,24 +133,27 @@ def HashModel(name: str, schema: type[ModelT], /) -> type[_HashModel]:
     Returns:
         a HashModel model class with the given name
     """
+    fields = get_field_definitions(schema, embedded_models=None, is_for_redis=True)
+
     # FIXME: Handle scenario where a pk is defined
     return create_model(
         name,
         __doc__=schema.__doc__,
-        __slots__=schema.__slots__,
-        __base__=(
-            _HashModel,
-            schema,
-        ),
-        **{
-            field_name: (field.annotation, field)
-            for field_name, field in schema.model_fields.items()
-        },
+        __base__=(_HashModel,),
+        **fields,
     )
 
 
-def JsonModel(name: str, schema: type[ModelT], /) -> type[_JsonModel]:
+def JsonModel(
+    name: str,
+    schema: type[ModelT],
+    /,
+    embedded_models: dict[str, Type] = None,
+) -> type[_JsonModel]:
     """Creates a new JsonModel for the given schema for redis
+
+    Note that redis supports only single embedded objects,
+    not lists or tuples of embedded models
 
     A new model can be defined by::
 
@@ -158,23 +162,21 @@ def JsonModel(name: str, schema: type[ModelT], /) -> type[_JsonModel]:
     Args:
         name: the name of the model
         schema: the schema from which the model is to be made
+        embedded_models: a dict of embedded models of <field name>: annotation
 
     Returns:
         a JsonModel model class with the given name
     """
+    fields = get_field_definitions(
+        schema, embedded_models=embedded_models, is_for_redis=True
+    )
+
     # FIXME: Handle scenario where a pk is defined
     return create_model(
         name,
         __doc__=schema.__doc__,
-        __slots__=schema.__slots__,
-        __base__=(
-            _JsonModel,
-            schema,
-        ),
-        **{
-            field_name: (field.annotation, field)
-            for field_name, field in schema.model_fields.items()
-        },
+        __base__=(_JsonModel,),
+        **fields,
     )
 
 
@@ -192,17 +194,12 @@ def EmbeddedJsonModel(name: str, schema: type[ModelT], /) -> type[_EmbeddedJsonM
     Returns:
         a EmbeddedJsonModel model class with the given name
     """
+    fields = get_field_definitions(schema, embedded_models=None, is_for_redis=True)
+
     # FIXME: Handle scenario where a pk is defined
     return create_model(
         name,
         __doc__=schema.__doc__,
-        __slots__=schema.__slots__,
-        __base__=(
-            _EmbeddedJsonModel,
-            schema,
-        ),
-        **{
-            field_name: (field.annotation, field)
-            for field_name, field in schema.model_fields.items()
-        },
+        __base__=(_EmbeddedJsonModel,),
+        **fields,
     )

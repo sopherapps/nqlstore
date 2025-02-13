@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added Mongo-like Dot notation for querying SQL and redis
+
+### Changed
+
+- Added the `query` key-word parameter to the `find`, `update`, and `delete` for the mongo implementation
+  so that it is similar to the other interfaces
+- Added the `embedded_models` key-word argument on the `Model` initializers for redis and mongodb
+- Added the `relationships` key-word argument to the `Model` initializers for SQL
+
 ## [0.0.3] - 2025-02-06
 
 ### Changed

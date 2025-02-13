@@ -2,18 +2,46 @@ import re
 
 import pytest
 
+from nqlstore._compat import Document
 from tests.conftest import MongoBook, MongoLibrary
 from tests.utils import is_lib_installed, load_fixture
 
 _LIBRARY_DATA = load_fixture("libraries.json")
+_BOOK_DATA = load_fixture("books.json")
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
+async def test_register(mongo_store, inserted_mongo_libs):
+    """Register ensures that the MongoLibrary is properly initialized"""
+    assert (
+        MongoLibrary._document_settings.motor_collection.full_name
+        == "testing.libraries"
+    )
+    assert not issubclass(MongoBook, Document)
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def test_find(mongo_store, inserted_mongo_libs):
     """Find should find the items that match the filter"""
-    got = await mongo_store.find(MongoLibrary, {}, skip=1)
+    got = await mongo_store.find(MongoLibrary, {}, query={}, skip=1)
     expected = [v for idx, v in enumerate(inserted_mongo_libs) if idx >= 1]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
+async def test_find_dot_notation(mongo_store, inserted_mongo_libs):
+    """Find should find the items that match the filter with embedded objects"""
+    got = await mongo_store.find(
+        MongoLibrary, {"books.title": {"$regex": "^be.*", "$options": "i"}}
+    )
+    expected = [
+        v
+        for v in inserted_mongo_libs
+        if any([bk.title.lower().startswith("be") for bk in v.books])
+    ]
     assert got == expected
 
 
@@ -31,10 +59,13 @@ async def test_regex_find(mongo_store, regex_params_mongo, index):
 @pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def test_create(mongo_store):
     """Create should add many items to the mongo database"""
-    await mongo_store.register([MongoLibrary, MongoBook])
-    got = await mongo_store.insert(MongoLibrary, _LIBRARY_DATA)
-    got = [v.dict(exclude={"id"}) for v in got]
-    assert got == _LIBRARY_DATA
+    await mongo_store.register([MongoLibrary])
+    books = [MongoBook(**v) for v in _BOOK_DATA]
+    lib_data = [{**v, "books": [*books]} for v in _LIBRARY_DATA]
+    got = await mongo_store.insert(MongoLibrary, lib_data)
+    got = [v.model_dump(exclude={"id"}) for v in got]
+    expected = [{**v, "books": [*_BOOK_DATA]} for v in _LIBRARY_DATA]
+    assert got == expected
 
 
 @pytest.mark.asyncio
