@@ -185,7 +185,7 @@ def SQLModel(
     schema: type[ModelT],
     /,
     relationships: dict[str, type[Any] | type[Union[Any]]] = None,
-) -> type[_SQLModelMeta]:
+) -> type[_SQLModelMeta] | type[ModelT]:
     """Creates a new SQLModel for the given schema for redis
 
     A new model can be defined by::

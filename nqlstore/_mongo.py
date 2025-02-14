@@ -216,7 +216,7 @@ def MongoModel(
     embedded_models: dict[
         str, type[_EmbeddedMongoModel] | type[list[_EmbeddedMongoModel]]
     ] = None,
-) -> type[Document]:
+) -> type[Document] | type[ModelT]:
     """Creates a new Mongo Model for the given schema
 
     A new model can be defined by::
@@ -253,7 +253,7 @@ def EmbeddedMongoModel(
     embedded_models: dict[
         str, type[_EmbeddedMongoModel] | type[list[_EmbeddedMongoModel]]
     ] = None,
-) -> type[_EmbeddedMongoModel]:
+) -> type[_EmbeddedMongoModel] | type[ModelT]:
     """Creates a new embedded Mongo Model for the given schema
 
     A new model can be defined by::

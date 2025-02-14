@@ -119,7 +119,7 @@ class RedisStore(BaseStore):
         return matched_items
 
 
-def HashModel(name: str, schema: type[ModelT], /) -> type[_HashModel]:
+def HashModel(name: str, schema: type[ModelT], /) -> type[_HashModel] | type[ModelT]:
     """Creates a new HashModel for the given schema for redis
 
     A new model can be defined by::
@@ -149,7 +149,7 @@ def JsonModel(
     schema: type[ModelT],
     /,
     embedded_models: dict[str, Type] = None,
-) -> type[_JsonModel]:
+) -> type[_JsonModel] | type[ModelT]:
     """Creates a new JsonModel for the given schema for redis
 
     Note that redis supports only single embedded objects,
@@ -180,7 +180,9 @@ def JsonModel(
     )
 
 
-def EmbeddedJsonModel(name: str, schema: type[ModelT], /) -> type[_EmbeddedJsonModel]:
+def EmbeddedJsonModel(
+    name: str, schema: type[ModelT], /
+) -> type[_EmbeddedJsonModel] | type[ModelT]:
     """Creates a new EmbeddedJsonModel for the given schema for redis
 
     A new model can be defined by::
