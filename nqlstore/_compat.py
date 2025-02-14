@@ -61,11 +61,12 @@ except ImportError:
     from typing import Set as _ColumnExpressionOrStrLabelArgument
     from typing import Union
 
-    from pydantic import BaseModel as _SQLModel
+    from pydantic import BaseModel
     from pydantic._internal._repr import Representation
     from pydantic.fields import Field as _SQLField
     from pydantic.fields import FieldInfo as _FieldInfo
 
+    _SQLModel = BaseModel
     post_init_field_info = lambda b: b
     NoArgAnyCallable = Callable[[], Any]
     OnDeleteType = Literal["CASCADE", "SET NULL", "RESTRICT"]
@@ -126,7 +127,7 @@ try:
     )
     from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorClientSession
 except ImportError:
-    from pydantic import BaseModel as Document
+    from pydantic import BaseModel
 
     init_beanie = lambda *a, **k: dict(**k)
     BulkWriter = Any
@@ -134,6 +135,7 @@ except ImportError:
     AsyncIOMotorClient = lambda *a, **k: dict(**k)
     AsyncIOMotorClientSession = Any
     PydanticObjectId = Any
+    Document = BaseModel
 
     import enum
 

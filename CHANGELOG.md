@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2025-02-14
+
+### Changed
+
+- Improved the type annotations of the created models to show both Schema 
+  and db-specific model classes like "Document"
+
 ## [0.1.0] - 2025-02-13
 
 ### Added
