@@ -153,7 +153,7 @@ async def main():
 
 ### Use your models in your application
 
-In the rest of you application use the four class methods available on the models.  
+In the rest of your application use the four CRUD methods on the store to do CRUD operations.  
 Filtering follows the [MongoDb-style](https://www.mongodb.com/docs/manual/reference/method/db.collection.find/#find-documents-that-match-query-criteria)
 
 > **Note**: For more complex queries, one can also pass in querying styles native to the type of the database,  
