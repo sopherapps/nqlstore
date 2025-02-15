@@ -98,7 +98,13 @@ async def test_create(sql_store):
 @pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 async def test_update_native(sql_store, inserted_sql_libs):
     """Update should update the items that match the native filter"""
-    updates = {"address": "some new address"}
+    updates = {
+        "address": "some new address",
+        "books": [
+            {"title": "Upon this mountain"},
+            {"title": "No longer at ease"},
+        ],
+    }
     matches_query = lambda v: v.name.startswith("Bu") and v.address == _TEST_ADDRESS
 
     # in immediate response
@@ -128,7 +134,13 @@ async def test_update_native(sql_store, inserted_sql_libs):
 @pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 async def test_update_mongo_style(sql_store, inserted_sql_libs):
     """Update should update the items that match the mongodb-like filter"""
-    updates = {"address": "some new address"}
+    updates = {
+        "address": "some new address",
+        "books": [
+            {"title": "Upon this mountain"},
+            {"title": "No longer at ease"},
+        ],
+    }
     matches_query = lambda v: v.name != "Kisaasi" and v.address == _TEST_ADDRESS
 
     # in immediate response
@@ -164,7 +176,13 @@ async def test_update_mongo_style(sql_store, inserted_sql_libs):
 @pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 async def test_update_hybrid(sql_store, inserted_sql_libs):
     """Update should update the items that match the mongodb-like filter AND the native filter"""
-    updates = {"address": "some new address"}
+    updates = {
+        "address": "some new address",
+        "books": [
+            {"title": "Upon this mountain"},
+            {"title": "No longer at ease"},
+        ],
+    }
     matches_query = lambda v: v.name.startswith("Bu") and v.address == _TEST_ADDRESS
 
     # in immediate response
@@ -196,7 +214,13 @@ async def test_update_hybrid(sql_store, inserted_sql_libs):
 async def test_update_dot_notation(sql_store, inserted_sql_libs):
     """Update should update the items that match the filter with embedded objects"""
     wanted_titles = ["Belljar", "Benediction man"]
-    updates = {"address": "some new address"}
+    updates = {
+        "address": "some new address",
+        "books": [
+            {"title": "Upon this mountain"},
+            {"title": "No longer at ease"},
+        ],
+    }
     matches_query = lambda v: any(bk.title in wanted_titles for bk in v.books)
 
     got = await sql_store.update(

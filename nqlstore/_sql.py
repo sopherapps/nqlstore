@@ -76,6 +76,7 @@ class SQLStore(BaseStore):
                     elif isinstance(embedded_value, _SQLModel):
                         embedded_values.append(embedded_value)
 
+                # insert the related items
                 if len(embedded_values) > 0:
                     field_model = field.property.mapper.class_
                     embed_stmt = insert(field_model).returning(field_model)
@@ -155,6 +156,15 @@ class SQLStore(BaseStore):
                 relations=relations,
             )
 
+            # dealing with nested models in the update
+            relations_mapper = _get_relations_mapper(model)
+            embedded_updates = {}
+            for k in relations_mapper:
+                try:
+                    embedded_updates[k] = updates.pop(k)
+                except KeyError:
+                    pass
+
             stmt = (
                 update(model)
                 .where(*non_rel_filters, *rel_filters)
@@ -163,9 +173,48 @@ class SQLStore(BaseStore):
             )
 
             cursor = await session.stream(stmt)
-            results = await cursor.fetchall()
+            raw_results = await cursor.fetchall()
+            results = [model.model_validate(row._mapping) for row in raw_results]
+            result_ids = [v.id for v in results]
+
+            for k, v in embedded_updates.items():
+                field = relations_mapper[k]
+                field_props = field.property
+                field_model = field_props.mapper.class_
+                # fk = foreign key
+                fk_field_name = field_props.primaryjoin.right.name
+                fk_field = getattr(field_model, fk_field_name)
+                parent_id_field = field_props.primaryjoin.left.name
+
+                # get the foreign keys to use in resetting all affected
+                # relationships;
+                # get parsed embedded values so that they can replace
+                # the old relations.
+                # Note: this operation is strictly replace, not patch
+                embedded_values = []
+                fk_values = []
+                for parent in results:
+                    embedded_value = _parse_embedded(v, field, parent)
+                    if isinstance(embedded_value, Iterable):
+                        embedded_values += embedded_value
+                        fk_values.append(getattr(parent, parent_id_field))
+                    elif isinstance(embedded_value, _SQLModel):
+                        embedded_values.append(embedded_value)
+                        fk_values.append(getattr(parent, parent_id_field))
+
+                # insert the related items
+                if len(embedded_values) > 0:
+                    # Reset the relationship; delete all other related items
+                    # Currently, this operation replaces all past relations
+                    reset_stmt = delete(field_model).where(fk_field.in_(fk_values))
+                    await session.stream(reset_stmt)
+
+                    # insert the latest changes
+                    embed_stmt = insert(field_model).returning(field_model)
+                    await session.stream_scalars(embed_stmt, embedded_values)
+
             await session.commit()
-            return [model(**row._mapping) for row in results]
+            return await self.find(model, model.id.in_(result_ids))
 
     async def delete(
         self,
