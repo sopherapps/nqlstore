@@ -48,7 +48,9 @@ class RedisStore(BaseStore):
         pipeline_verifier: Callable[..., Any] = verify_pipeline_response,
         **kwargs,
     ) -> list[_T]:
-        parsed_items = [v if isinstance(v, model) else model(**v) for v in items]
+        parsed_items = [
+            v if isinstance(v, model) else model.model_validate(v) for v in items
+        ]
         results = await model.add(
             parsed_items, pipeline=pipeline, pipeline_verifier=pipeline_verifier
         )

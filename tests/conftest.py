@@ -108,12 +108,15 @@ def redis_store():
 @pytest.mark.skipif(not is_lib_installed("redis_om"), reason="Requires redis_om.")
 async def inserted_redis_libs(redis_store):
     """The libraries inserted in the redis store"""
-    inserted_libs, _ = await insert_test_data(
+    inserted_libs = await insert_test_data(
         redis_store,
         library_model=RedisLibrary,
         book_model=RedisBook,
-        is_book_embedded=True,
     )
+    # sanity check
+    all_books = [bk for lib in inserted_libs for bk in lib.books]
+    assert all_books != []
+
     yield inserted_libs
 
 
@@ -128,12 +131,13 @@ def regex_params_redis(inserted_redis_libs):
 @pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def inserted_mongo_libs(mongo_store):
     """The libraries inserted in the mongodb store"""
-    inserted_libs, _ = await insert_test_data(
-        mongo_store,
-        library_model=MongoLibrary,
-        book_model=MongoBook,
-        is_book_embedded=True,
+    inserted_libs = await insert_test_data(
+        mongo_store, library_model=MongoLibrary, book_model=MongoBook
     )
+    # sanity check
+    all_books = [bk for lib in inserted_libs for bk in lib.books]
+    assert all_books != []
+
     yield inserted_libs
 
 
@@ -148,9 +152,13 @@ def regex_params_mongo(inserted_mongo_libs):
 @pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 async def inserted_sql_libs(sql_store):
     """The libraries inserted in the sql store"""
-    inserted_libs, _ = await insert_test_data(
+    inserted_libs = await insert_test_data(
         sql_store, library_model=SqlLibrary, book_model=SqlBook
     )
+    # sanity check
+    all_books = [bk for lib in inserted_libs for bk in lib.books]
+    assert all_books != []
+
     yield inserted_libs
 
 
