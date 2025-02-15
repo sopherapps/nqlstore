@@ -1,8 +1,9 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from models import (
     MongoTodo,
     MongoTodoList,
@@ -55,10 +56,10 @@ async def lifespan(app_: FastAPI):
     yield
 
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 
-@app.get("/todos/")
+@app.get("/todos")
 async def search(
     sql: _SqlStoreDep,
     redis: _RedisStoreDep,
@@ -66,7 +67,23 @@ async def search(
     q: str = Query(...),
 ):
     """Searches for todos by name"""
-    pass
+    results = []
+    query = {"name": {"$in": q}}
+
+    try:
+        if sql:
+            results += await sql.find(SqlTodoList, query=query)
+
+        if redis:
+            results += await redis.find(RedisTodoList, query=query)
+
+        if mongo:
+            results += await mongo.find(MongoTodoList, query=query)
+    except Exception as exp:
+        logging.error(exp)
+        raise exp
+
+    return results
 
 
 @app.get("/todos/{id}")
@@ -77,10 +94,29 @@ async def get_one(
     id: int | str,
 ):
     """Get todolist by id"""
-    pass
+    results = []
+    query = {"id": {"$eq": id}}
+
+    try:
+        if sql:
+            results += await sql.find(SqlTodoList, query=query, limit=1)
+
+        if redis:
+            results += await redis.find(RedisTodoList, query=query, limit=1)
+
+        if mongo:
+            results += await mongo.find(MongoTodoList, query=query, limit=1)
+    except Exception as exp:
+        logging.error(exp)
+        raise exp
+
+    try:
+        return results[0]
+    except IndexError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
 
-@app.post("/todos/")
+@app.post("/todos")
 async def create_one(
     sql: _SqlStoreDep,
     redis: _RedisStoreDep,
@@ -88,7 +124,23 @@ async def create_one(
     payload: TodoList,
 ):
     """Create a todolist"""
-    pass
+    results = []
+    payload_dict = payload.model_dump(exclude_unset=True)
+
+    try:
+        if sql:
+            results += await sql.insert(SqlTodoList, [payload_dict])
+
+        if redis:
+            results += await redis.insert(RedisTodoList, [payload_dict])
+
+        if mongo:
+            results += await mongo.insert(MongoTodoList, [payload_dict])
+
+        return results[0]
+    except Exception as exp:
+        logging.error(exp)
+        raise exp
 
 
 @app.put("/todos/{id}")
@@ -100,7 +152,27 @@ async def update_one(
     payload: TodoList,
 ):
     """Update a todolist"""
-    pass
+    results = []
+    query = {"id": {"$eq": id}}
+    updates = payload.model_dump(exclude_unset=True)
+
+    try:
+        if sql:
+            results += await sql.update(SqlTodoList, query=query, updates=updates)
+
+        if redis:
+            results += await redis.update(RedisTodoList, query=query, updates=updates)
+
+        if mongo:
+            results += await mongo.update(MongoTodoList, query=query, updates=updates)
+    except Exception as exp:
+        logging.error(exp)
+        raise exp
+
+    try:
+        return results[0]
+    except IndexError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
 
 @app.delete("/todos/{id}")
@@ -109,7 +181,25 @@ async def delete_one(
     redis: _RedisStoreDep,
     mongo: _MongoStoreDep,
     id: int | str,
-    payload: TodoList,
 ):
     """Delete a todolist"""
-    pass
+    results = []
+    query = {"id": {"$eq": id}}
+
+    try:
+        if sql:
+            results += await sql.delete(SqlTodoList, query=query)
+
+        if redis:
+            results += await redis.find(RedisTodoList, query=query)
+
+        if mongo:
+            results += await mongo.find(MongoTodoList, query=query)
+    except Exception as exp:
+        logging.error(exp)
+        raise exp
+
+    try:
+        return results[0]
+    except IndexError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)

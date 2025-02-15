@@ -39,7 +39,7 @@ _SEARCH_PARAMS = [
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("store, model, todolist", _POST_PARAMS)
-async def test_create_sql_todolist(
+async def test_create_todolist(
     client: TestClient,
     store: BaseStore,
     model: type[BaseModel],
@@ -61,7 +61,8 @@ async def test_create_sql_todolist(
                 )
             ],
         }
-        db_results = await store.find(model, query={"id": got["id"]}, limit=1)
+        db_query = {"id": {"$eq": got["id"]}}
+        db_results = await store.find(model, query=db_query, limit=1)
         record_in_db = db_results[0].model_dump()
 
         assert got == expected
@@ -92,7 +93,8 @@ async def test_update_todolist(
 
         got = response.json()
         expected = todolist.model_copy(update=update).model_dump()
-        db_results = await store.find(model, query={"id": id_}, limit=1)
+        db_query = {"id": {"$eq": id_}}
+        db_results = await store.find(model, query=db_query, limit=1)
         record_in_db = db_results[0].model_dump()
 
         assert got == expected
@@ -118,7 +120,9 @@ async def test_delete_todolist(
 
         got = response.json()
         expected = todolist.model_dump()
-        db_results = await store.find(model, query={"id": id_}, limit=1)
+
+        db_query = {"id": {"$eq": id_}}
+        db_results = await store.find(model, query=db_query, limit=1)
 
         assert got == expected
         assert db_results == []
@@ -143,7 +147,9 @@ async def test_read_one_todolist(
 
         got = response.json()
         expected = todolist.model_dump()
-        db_results = await store.find(model, query={"id": id_}, limit=1)
+
+        db_query = {"id": {"$eq": id_}}
+        db_results = await store.find(model, query=db_query, limit=1)
         record_in_db = db_results[0].model_dump()
 
         assert got == expected
@@ -159,10 +165,10 @@ async def test_search_by_name(
     todolists: list[BaseModel],
     q: str,
 ):
-    """GET /todos/?q={} gets all todos with name containing search item"""
+    """GET /todos?q={} gets all todos with name containing search item"""
     # using context manager to ensure on_startup runs
     with client as client:
-        response = client.get(f"/todos/?q={q}")
+        response = client.get(f"/todos?q={q}")
 
         got = response.json()
         expected = [v.model_dump() for v in todolists if q in v.name.lower()]
@@ -179,7 +185,7 @@ def _subdict(data: dict, include: list[str]) -> dict:
     Returns:
         dictionary with only the given keys if they exist
     """
-    return {k: v for k, v in data.items if k in include}
+    return {k: v for k, v in data.items() if k in include}
 
 
 def _get_id(item: Any) -> Any:

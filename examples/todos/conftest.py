@@ -32,6 +32,9 @@ def sql_store():
     store = SQLStore(uri=sql_url)
     yield store
 
+    # cleanup
+    os.environ["SQL_URL"] = ""
+
 
 @pytest.fixture
 def mongo_store():
@@ -49,6 +52,7 @@ def mongo_store():
     # clean up after the test
     client = pymongo.MongoClient("mongodb://localhost:27017")  # type: ignore
     client.drop_database("testing")
+    os.environ["MONGO_URL"] = ""
 
 
 @pytest.fixture
@@ -65,6 +69,7 @@ def redis_store():
     # clean up after the test
     client = redis.Redis("localhost", 6379, 0)
     client.flushall()
+    os.environ["REDIS_URL"] = ""
 
 
 @pytest.fixture
