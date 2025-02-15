@@ -1,4 +1,4 @@
-fastapi[statndard]~=0.115.8
+fastapi[standard]~=0.115.8
 nqlstore[all]
 black~=25.1.0
 isort~=6.0.0

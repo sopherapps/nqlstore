@@ -24,60 +24,76 @@ TODO_LISTS: list[dict[str, Any]] = [
 
 
 @pytest.fixture
-def sql_store():
-    """The sql store stored in memory"""
-    sql_url = "sqlite+aiosqlite:///:memory:"
-    os.environ["SQL_URL"] = sql_url
+def client_with_sql():
+    """The fastapi test client when SQL is enabled"""
+    _reset_env()
+    os.environ["SQL_URL"] = "sqlite+aiosqlite:///:memory:"
 
-    store = SQLStore(uri=sql_url)
-    yield store
+    from main import app
 
-    # cleanup
-    os.environ["SQL_URL"] = ""
+    yield TestClient(app)
+    _reset_env()
 
 
 @pytest.fixture
-def mongo_store():
-    """The mongodb store. Requires a running instance of mongodb"""
-    import pymongo
+def client_with_redis():
+    """The fastapi test client when redis is enabled"""
+    _reset_env()
+    redis_url = "redis://localhost:6379/0"
+    os.environ["REDIS_URL"] = redis_url
+
+    import redis
+    from main import app
+
+    yield TestClient(app)
+    _reset_env()
+
+    client = redis.Redis("localhost", 6379, 0)
+    client.flushall()
+
+
+@pytest.fixture
+def client_with_mongo():
+    """The fastapi test client when mongodb is enabled"""
+    _reset_env()
 
     mongo_url = "mongodb://localhost:27017"
     mongo_db = "testing"
     os.environ["MONGO_URL"] = mongo_url
     os.environ["MONGO_DB"] = mongo_db
 
-    store = MongoStore(uri=mongo_url, database=mongo_db)
-    yield store
-
-    # clean up after the test
-    client = pymongo.MongoClient("mongodb://localhost:27017")  # type: ignore
-    client.drop_database("testing")
-    os.environ["MONGO_URL"] = ""
-
-
-@pytest.fixture
-def redis_store():
-    """The redis store. Requires a running instance of redis stack"""
-    import redis
-
-    redis_url = "redis://localhost:6379/0"
-    os.environ["REDIS_URL"] = redis_url
-
-    store = RedisStore(uri=redis_url)
-    yield store
-
-    # clean up after the test
-    client = redis.Redis("localhost", 6379, 0)
-    client.flushall()
-    os.environ["REDIS_URL"] = ""
-
-
-@pytest.fixture
-def client():
-    """The fastapi test client"""
+    import pymongo
     from main import app
 
     yield TestClient(app)
+    _reset_env()
+
+    client = pymongo.MongoClient(mongo_url)  # type: ignore
+    client.drop_database(mongo_db)
+
+
+@pytest.fixture
+def sql_store(client_with_sql: TestClient):
+    """The sql store stored in memory"""
+    # using context manager to ensure on_startup runs
+    with client_with_sql as client:
+        yield client.app.state.SQL_STORE
+
+
+@pytest.fixture
+def mongo_store(client_with_mongo: TestClient):
+    """The mongodb store. Requires a running instance of mongodb"""
+    # using context manager to ensure on_startup runs
+    with client_with_mongo as client:
+        yield client.app.state.MONGO_STORE
+
+
+@pytest.fixture
+def redis_store(client_with_redis: TestClient):
+    """The redis store. Requires a running instance of redis stack"""
+    # using context manager to ensure on_startup runs
+    with client_with_redis as client:
+        yield client.app.state.REDIS_STORE
 
 
 @pytest_asyncio.fixture()
@@ -140,3 +156,11 @@ def pytest_fixture_setup(
     if isinstance(param, LazyFixture):
         request.param = request.getfixturevalue(param.name)
     return None
+
+
+def _reset_env():
+    """Resets the environment variables available to the app"""
+    os.environ["SQL_URL"] = ""
+    os.environ["REDIS_URL"] = ""
+    os.environ["MONGO_URL"] = ""
+    os.environ["MONGO_DB"] = "testing"

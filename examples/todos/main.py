@@ -14,20 +14,16 @@ from models import (
 )
 from schemas import TodoList
 
-from nqlstore import (
-    MongoStore,
-    RedisStore,
-    SQLStore,
-)
+from nqlstore import MongoStore, RedisStore, SQLStore
 
-_SQL_STORE: SQLStore | None = None
-_REDIS_STORE: RedisStore | None = None
-_MONGO_STORE: MongoStore | None = None
+SQL_STORE: SQLStore | None = None
+REDIS_STORE: RedisStore | None = None
+MONGO_STORE: MongoStore | None = None
 
 # dependencies
-_SqlStoreDep = Annotated[SQLStore | None, Depends(lambda: _SQL_STORE)]
-_RedisStoreDep = Annotated[RedisStore | None, Depends(lambda: _REDIS_STORE)]
-_MongoStoreDep = Annotated[MongoStore | None, Depends(lambda: _MONGO_STORE)]
+_SqlStoreDep = Annotated[SQLStore | None, Depends(lambda: SQL_STORE)]
+_RedisStoreDep = Annotated[RedisStore | None, Depends(lambda: REDIS_STORE)]
+_MongoStoreDep = Annotated[MongoStore | None, Depends(lambda: MONGO_STORE)]
 
 
 # startup events
@@ -39,19 +35,22 @@ async def lifespan(app_: FastAPI):
     mongo_db = os.environ.get("MONGO_DB", "todos")
 
     if sql_url:
-        global _SQL_STORE
-        _SQL_STORE = SQLStore(uri=sql_url)
-        await _SQL_STORE.register([SqlTodoList, SqlTodo])
+        global SQL_STORE
+        SQL_STORE = SQLStore(uri=sql_url)
+        await SQL_STORE.register([SqlTodoList, SqlTodo])
+        app_.state.SQL_STORE = SQL_STORE
 
     if redis_url:
-        global _REDIS_STORE
-        _REDIS_STORE = RedisStore(uri=redis_url)
-        await _REDIS_STORE.register([RedisTodoList, RedisTodo])
+        global REDIS_STORE
+        REDIS_STORE = RedisStore(uri=redis_url)
+        await REDIS_STORE.register([RedisTodoList, RedisTodo])
+        app_.state.REDIS_STORE = REDIS_STORE
 
     if mongo_url:
-        global _MONGO_STORE
-        _MONGO_STORE = MongoStore(uri=mongo_url, database=mongo_db)
-        await _MONGO_STORE.register([MongoTodoList, MongoTodo])
+        global MONGO_STORE
+        MONGO_STORE = MongoStore(uri=mongo_url, database=mongo_db)
+        await MONGO_STORE.register([MongoTodoList, MongoTodo])
+        app_.state.MONGO_STORE = MONGO_STORE
 
     yield
 
@@ -137,7 +136,8 @@ async def create_one(
         if mongo:
             results += await mongo.insert(MongoTodoList, [payload_dict])
 
-        return results[0]
+        result = results[0].model_dump()
+        return result
     except Exception as exp:
         logging.error(exp)
         raise exp
