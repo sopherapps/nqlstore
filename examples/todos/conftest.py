@@ -1,5 +1,6 @@
 """Fixtures for tests"""
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,7 +26,10 @@ TODO_LISTS: list[dict[str, Any]] = [
 @pytest.fixture
 def sql_store():
     """The sql store stored in memory"""
-    store = SQLStore(uri="sqlite+aiosqlite:///:memory:")
+    sql_url = "sqlite+aiosqlite:///:memory:"
+    os.environ["SQL_URL"] = sql_url
+
+    store = SQLStore(uri=sql_url)
     yield store
 
 
@@ -34,7 +38,12 @@ def mongo_store():
     """The mongodb store. Requires a running instance of mongodb"""
     import pymongo
 
-    store = MongoStore(uri="mongodb://localhost:27017", database="testing")
+    mongo_url = "mongodb://localhost:27017"
+    mongo_db = "testing"
+    os.environ["MONGO_URL"] = mongo_url
+    os.environ["MONGO_DB"] = mongo_db
+
+    store = MongoStore(uri=mongo_url, database=mongo_db)
     yield store
 
     # clean up after the test
@@ -47,7 +56,10 @@ def redis_store():
     """The redis store. Requires a running instance of redis stack"""
     import redis
 
-    store = RedisStore(uri="redis://localhost:6379/0")
+    redis_url = "redis://localhost:6379/0"
+    os.environ["REDIS_URL"] = redis_url
+
+    store = RedisStore(uri=redis_url)
     yield store
 
     # clean up after the test
