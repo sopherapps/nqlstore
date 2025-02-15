@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.3] - 2025-02-15
+
 ### Added
 
 - Added ability to insert children of parent models as though they were embedded in the parent 

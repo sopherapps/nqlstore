@@ -7,7 +7,7 @@ name = "nqlstore"
 authors = [
     {name = "Martin Ahindura", email = "sales@sopherapps.com"},
 ]
-version = "0.1.2"
+version = "0.1.3"
 description = "NQLStore, a simple CRUD store python library for `any query launguage` (or in short `nql`)."
 readme = "README.md"
 requires-python = ">=3.10"
