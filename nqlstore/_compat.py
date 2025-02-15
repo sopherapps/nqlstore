@@ -42,6 +42,7 @@ try:
     from sqlalchemy import Column, Table
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.orm import InstrumentedAttribute, RelationshipProperty, subqueryload
+    from sqlalchemy.orm.exc import DetachedInstanceError
     from sqlalchemy.sql._typing import (
         _ColumnExpressionArgument,
         _ColumnExpressionOrStrLabelArgument,
@@ -52,7 +53,7 @@ try:
     from sqlmodel.ext.asyncio.session import AsyncSession
     from sqlmodel.main import Field as _SQLField
     from sqlmodel.main import FieldInfo as _SqlFieldInfo
-    from sqlmodel.main import NoArgAnyCallable, OnDeleteType
+    from sqlmodel.main import IncEx, NoArgAnyCallable, OnDeleteType
     from sqlmodel.main import RelationshipInfo as _RelationshipInfo
 except ImportError:
     from typing import Mapping, Optional, Sequence
@@ -78,6 +79,8 @@ except ImportError:
     Table = Set
     InstrumentedAttribute = Set
     subqueryload = lambda *a, **kwargs: dict(**kwargs)
+    DetachedInstanceError = RuntimeError
+    IncEx = Set[Any] | dict
 
     class _SqlFieldInfo(_FieldInfo): ...
 

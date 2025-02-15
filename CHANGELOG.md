@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.4] - 2025-02-15
+
+### Fixed
+
+- Enabled recursive serialization of child SQL models when `model_dump()` is called.
+
 ## [0.1.3] - 2025-02-15
 
 ### Added
