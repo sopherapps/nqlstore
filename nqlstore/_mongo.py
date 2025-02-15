@@ -81,7 +81,9 @@ class MongoStore(BaseStore):
         link_rule: WriteRules = WriteRules.DO_NOTHING,
         **pymongo_kwargs: Any,
     ) -> list[_T]:
-        parsed_items = [v if isinstance(v, model) else model(**v) for v in items]
+        parsed_items = [
+            v if isinstance(v, model) else model.model_validate(v) for v in items
+        ]
         results = await model.insert_many(
             parsed_items, session=session, link_rule=link_rule, **pymongo_kwargs
         )

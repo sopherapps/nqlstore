@@ -36,34 +36,24 @@ async def insert_test_data(
     store: BaseStore,
     library_model: type[_LibType],
     book_model: type[_BookType],
-    is_book_embedded: bool = False,
-) -> tuple[list[_LibType], list[_BookType]]:
+) -> list[_LibType]:
     """Insert data in the database before tests
 
     Args:
         store: the store to insert test data in
         library_model: the model class for the Library
         book_model: the model class for the Book
-        is_book_embedded: whether the book is embedded or not
 
     Returns:
-        the inserted data as a tuple of libraries, books
+        the inserted libraries (with books embedded)
     """
     library_data = load_fixture("libraries.json")
     book_data = load_fixture("books.json")
     await store.register([library_model, book_model])
 
-    if is_book_embedded:
-        library_data = _embed_test_books(book_model, libs=library_data, books=book_data)
-        libraries = await store.insert(library_model, library_data)
-        return libraries, []
-
+    library_data = _embed_test_books(book_model, libs=library_data, books=book_data)
     libraries = await store.insert(library_model, library_data)
-    book_data = _attach_test_books(book_model, books=book_data, libs=libraries)
-    books = await store.insert(book_model, book_data)
-    libraries = _populate_libs_with_books(libs=libraries, books=books)
-
-    return libraries, books
+    return libraries
 
 
 def _populate_libs_with_books(
@@ -107,7 +97,7 @@ def _embed_test_books(
         try:
             libs_copy[idx % 2]["books"].append(model(**data))
         except KeyError:
-            libs_copy[idx % 2]["books"] = [model(**data)]
+            libs_copy[idx % 2]["books"] = [{**data}]
 
     return libs_copy
 

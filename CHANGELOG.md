@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added ability to insert children of parent models as though they were embedded in the parent 
+  in SQL the SQL implementation. (This makes it possible to simulate embeddedness)
+- Added ability to replace children of SQL parent models when updating the parent
+
 ## [0.1.2] - 2025-02-15
 
 ### Added

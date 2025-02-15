@@ -1,6 +1,7 @@
 """SQL implementation"""
 
 import sys
+from collections.abc import Mapping, MutableMapping
 from typing import Any, Iterable, TypeVar, Union
 
 from pydantic import create_model
@@ -23,7 +24,7 @@ from ._compat import (
     subqueryload,
     update,
 )
-from ._field import Field, get_field_definitions
+from ._field import Field, FieldInfo, get_field_definitions
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
@@ -48,13 +49,42 @@ class SQLStore(BaseStore):
     async def insert(
         self, model: type[_T], items: Iterable[_T | dict], **kwargs
     ) -> list[_T]:
-        parsed_items = [v if isinstance(v, model) else model(**v) for v in items]
+        parsed_items = [
+            v if isinstance(v, model) else model.model_validate(v) for v in items
+        ]
+        relations_mapper = _get_relations_mapper(model)
+
         async with AsyncSession(self._engine) as session:
             stmt = insert(model).returning(model)
             cursor = await session.stream_scalars(stmt, parsed_items)
-            await session.commit()
             results = await cursor.all()
-            return list(results)
+            result_ids = [v.id for v in results]
+
+            # insert embedded items also to permit something like
+            # store.insert(Lib, [{"books": [{"title": "yay"}, ...]}])
+            # where "books" is a one-to-many relationship
+            # i.e. the kind that might be 'embedded' in Mongo-terms
+            for k, field in relations_mapper.items():
+                embedded_values = []
+
+                for idx, record in enumerate(items):
+                    parent = results[idx]
+                    raw_value = _get_key_or_prop(record, k)
+                    embedded_value = _parse_embedded(raw_value, field, parent)
+                    if isinstance(embedded_value, Iterable):
+                        embedded_values += embedded_value
+                    elif isinstance(embedded_value, _SQLModel):
+                        embedded_values.append(embedded_value)
+
+                # insert the related items
+                if len(embedded_values) > 0:
+                    field_model = field.property.mapper.class_
+                    embed_stmt = insert(field_model).returning(field_model)
+                    await session.stream_scalars(embed_stmt, embedded_values)
+
+            await session.commit()
+            refreshed_results = await self.find(model, model.id.in_(result_ids))
+            return list(refreshed_results)
 
     async def find(
         self,
@@ -126,6 +156,15 @@ class SQLStore(BaseStore):
                 relations=relations,
             )
 
+            # dealing with nested models in the update
+            relations_mapper = _get_relations_mapper(model)
+            embedded_updates = {}
+            for k in relations_mapper:
+                try:
+                    embedded_updates[k] = updates.pop(k)
+                except KeyError:
+                    pass
+
             stmt = (
                 update(model)
                 .where(*non_rel_filters, *rel_filters)
@@ -134,9 +173,48 @@ class SQLStore(BaseStore):
             )
 
             cursor = await session.stream(stmt)
-            results = await cursor.fetchall()
+            raw_results = await cursor.fetchall()
+            results = [model.model_validate(row._mapping) for row in raw_results]
+            result_ids = [v.id for v in results]
+
+            for k, v in embedded_updates.items():
+                field = relations_mapper[k]
+                field_props = field.property
+                field_model = field_props.mapper.class_
+                # fk = foreign key
+                fk_field_name = field_props.primaryjoin.right.name
+                fk_field = getattr(field_model, fk_field_name)
+                parent_id_field = field_props.primaryjoin.left.name
+
+                # get the foreign keys to use in resetting all affected
+                # relationships;
+                # get parsed embedded values so that they can replace
+                # the old relations.
+                # Note: this operation is strictly replace, not patch
+                embedded_values = []
+                fk_values = []
+                for parent in results:
+                    embedded_value = _parse_embedded(v, field, parent)
+                    if isinstance(embedded_value, Iterable):
+                        embedded_values += embedded_value
+                        fk_values.append(getattr(parent, parent_id_field))
+                    elif isinstance(embedded_value, _SQLModel):
+                        embedded_values.append(embedded_value)
+                        fk_values.append(getattr(parent, parent_id_field))
+
+                # insert the related items
+                if len(embedded_values) > 0:
+                    # Reset the relationship; delete all other related items
+                    # Currently, this operation replaces all past relations
+                    reset_stmt = delete(field_model).where(fk_field.in_(fk_values))
+                    await session.stream(reset_stmt)
+
+                    # insert the latest changes
+                    embed_stmt = insert(field_model).returning(field_model)
+                    await session.stream_scalars(embed_stmt, embedded_values)
+
             await session.commit()
-            return [model(**row._mapping) for row in results]
+            return await self.find(model, model.id.in_(result_ids))
 
     async def delete(
         self,
@@ -203,7 +281,6 @@ def SQLModel(
     """
     fields = get_field_definitions(schema, relationships=relationships, is_for_sql=True)
 
-    # FIXME: Handle scenario where a pk is defined
     return create_model(
         name,
         # module of the calling function
@@ -229,6 +306,22 @@ def _get_relations(model: type[_SQLModel]):
         for v in model.__mapper__.all_orm_descriptors.values()
         if isinstance(v.property, RelationshipProperty)
     ]
+
+
+def _get_relations_mapper(model: type[_SQLModel]) -> dict[str, Any]:
+    """Gets all the relational fields with their names of the given model
+
+    Args:
+        model: the SQL model to inspect
+
+    Returns:
+        dict of (name, Field) that have associated relationships
+    """
+    return {
+        k: v
+        for k, v in model.__mapper__.all_orm_descriptors.items()
+        if isinstance(v.property, RelationshipProperty)
+    }
 
 
 def _get_filtered_tables(filters: Iterable[_Filter]) -> list[Table]:
@@ -326,3 +419,82 @@ def _to_subquery_based_filters(
 
     # return a filter checking model id against the returned ids
     return [model.id.in_(subquery.where(*rel_filters))]
+
+
+def _get_key_or_prop(obj: dict | Any, name: str) -> Any:
+    """Gets value of a key or property from a given object or dict
+
+    Args:
+        obj: the object from which to get the value
+        name: the name of the key or property
+
+    Returns:
+        the value corresponding to the given key or property
+    """
+    if isinstance(obj, Mapping):
+        return obj.get(name, None)
+    else:
+        return getattr(obj, name, None)
+
+
+def _with_value(obj: dict | Any, field: str, value: Any) -> Any:
+    """Sets the value of a key or property of a given object or dict
+
+    Note: this mutates the object in-place
+
+    Args:
+        obj: the object
+        field: the name of the key or property
+        value: the value to set
+
+    Returns:
+        the mutated object
+    """
+    if isinstance(obj, MutableMapping):
+        obj[field] = value
+    else:
+        setattr(obj, field, value)
+
+    return obj
+
+
+def _parse_embedded(
+    value: Iterable[dict | Any] | dict | Any, field: Any, parent: _SQLModel
+) -> Iterable[_SQLModel] | _SQLModel | None:
+    """Parses embedded items that can be a single item or many into SQLModels
+
+    Args:
+        value: the value to parse
+        field: the field on which these embedded items are
+        parent: the parent SQLModel to which this value is attached
+
+    Returns:
+        An iterable of SQLModel instances or a single SQLModel instance
+        or None if value is None
+    """
+    if value is None:
+        return None
+
+    props = field.property  # type: RelationshipProperty[Any]
+    wrapper_type = props.collection_class
+    field_model = props.mapper.class_
+    fk_field = props.primaryjoin.right.name
+    parent_id_field = props.primaryjoin.left.name
+    fk_value = getattr(parent, parent_id_field)
+
+    if issubclass(wrapper_type, (list, tuple, set)):
+        # add a foreign key values to link back to parent
+        return wrapper_type(
+            [
+                field_model.model_validate(_with_value(v, fk_field, fk_value))
+                for v in value
+            ]
+        )
+    elif wrapper_type is None:
+        # add a foreign key value to link back to parent
+        linked_value = _with_value(value, fk_field, fk_value)
+        return field_model.model_validate(linked_value)
+
+    raise NotImplementedError(
+        f"relationship of type annotation {wrapper_type} not supported yet"
+    )
