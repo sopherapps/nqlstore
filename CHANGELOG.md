@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2025-02-15
+
+### Added
+
+- Added an `id` field to the Redis models to shadow the `pk` field
+
+### Changed
+
+- Changed the module name of the Model classes created to equal the module they are called from
+
+### Fixed
+
+- Fixed types for the `embedded_models` parameter of the `MongoModel()` and `EmbeddedModel()` functions
+
 ## [0.1.1] - 2025-02-14
 
 ### Changed

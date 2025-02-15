@@ -1,6 +1,7 @@
 """MongoDB implementation"""
 
 import re
+import sys
 from typing import Any, Iterable, Mapping, TypeVar
 
 from pydantic import BaseModel
@@ -214,7 +215,11 @@ def MongoModel(
     schema: type[ModelT],
     /,
     embedded_models: dict[
-        str, type[_EmbeddedMongoModel] | type[list[_EmbeddedMongoModel]]
+        str,
+        type[_EmbeddedMongoModel]
+        | type[list[_EmbeddedMongoModel]]
+        | type[ModelT]
+        | type[list[ModelT]],
     ] = None,
 ) -> type[Document] | type[ModelT]:
     """Creates a new Mongo Model for the given schema
@@ -237,6 +242,8 @@ def MongoModel(
 
     model = create_model(
         name,
+        # module of the calling function
+        __module__=sys._getframe(1).f_globals["__name__"],
         __doc__=schema.__doc__,
         __base__=(Document,),
         **fields,
@@ -251,7 +258,11 @@ def EmbeddedMongoModel(
     schema: type[ModelT],
     /,
     embedded_models: dict[
-        str, type[_EmbeddedMongoModel] | type[list[_EmbeddedMongoModel]]
+        str,
+        type[_EmbeddedMongoModel]
+        | type[list[_EmbeddedMongoModel]]
+        | type[ModelT]
+        | type[list[ModelT]],
     ] = None,
 ) -> type[_EmbeddedMongoModel] | type[ModelT]:
     """Creates a new embedded Mongo Model for the given schema
@@ -274,6 +285,8 @@ def EmbeddedMongoModel(
 
     return create_model(
         name,
+        # module of the calling function
+        __module__=sys._getframe(1).f_globals["__name__"],
         __doc__=schema.__doc__,
         __base__=(_EmbeddedMongoModel,),
         **fields,

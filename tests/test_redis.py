@@ -95,7 +95,7 @@ async def test_create(redis_store):
     books = [RedisBook(**v) for v in _BOOK_DATA]
     lib_data = [{**v, "books": [*books]} for v in _LIBRARY_DATA]
     got = await redis_store.insert(RedisLibrary, lib_data)
-    got = [v.model_dump(exclude={"pk"}) for v in got]
+    got = [v.model_dump(exclude={"pk", "id"}) for v in got]
     expected = [
         {**v, "books": [bk.model_dump() for bk in books]} for v in _LIBRARY_DATA
     ]

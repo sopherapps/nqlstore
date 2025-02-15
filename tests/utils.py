@@ -126,24 +126,8 @@ def _attach_test_books(
         the attached books
     """
     return [
-        model(library_id=_get_id(libs[idx % 2]), **data)
-        for idx, data in enumerate(books)
+        model(library_id=libs[idx % 2].id, **data) for idx, data in enumerate(books)
     ]
-
-
-def _get_id(lib: _LibType) -> PydanticObjectId | int | str:
-    """Gets the id of the lib
-
-    Args:
-        lib: the library to extract the id from
-
-    Returns:
-        the id or pk
-    """
-    try:
-        return lib.id
-    except AttributeError:
-        return lib.pk
 
 
 def to_sql_text(model: type[SQLModel], queries: tuple[_SQLFilter, ...]) -> str:
