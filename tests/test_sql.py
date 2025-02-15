@@ -9,6 +9,21 @@ _TEST_ADDRESS = "Hoima, Uganda"
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
+async def test_model_dump(sql_store, inserted_sql_libs):
+    """model_dump should recursively dump any 'embedded' models"""
+    got = [v.model_dump() for v in inserted_sql_libs]
+    expected = [
+        {
+            **v.model_dump(exclude={"books"}),
+            "books": [bk.model_dump() for bk in v.books],
+        }
+        for v in inserted_sql_libs
+    ]
+    assert got == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_lib_installed("sqlmodel"), reason="Requires sqlmodel.")
 async def test_find_native(sql_store, inserted_sql_libs):
     """Find should return the items that match the native filter"""
     got = await sql_store.find(

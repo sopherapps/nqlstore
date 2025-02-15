@@ -2,7 +2,7 @@
 
 import sys
 from collections.abc import Mapping, MutableMapping
-from typing import Any, Iterable, TypeVar, Union
+from typing import Any, Dict, Iterable, Literal, TypeVar, Union
 
 from pydantic import create_model
 from pydantic.main import ModelT
@@ -11,6 +11,8 @@ from ._base import BaseStore
 from ._compat import (
     AsyncSession,
     Column,
+    DetachedInstanceError,
+    IncEx,
     InstrumentedAttribute,
     RelationshipProperty,
     Table,
@@ -24,7 +26,7 @@ from ._compat import (
     subqueryload,
     update,
 )
-from ._field import Field, FieldInfo, get_field_definitions
+from ._field import Field, get_field_definitions
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
@@ -257,6 +259,60 @@ class _SQLModelMeta(_SQLModel):
     """The base class for all SQL models"""
 
     id: int | None = Field(default=None, primary_key=True)
+
+    def model_dump(
+        self,
+        *,
+        mode: Union[Literal["json", "python"], str] = "python",
+        include: IncEx = None,
+        exclude: IncEx = None,
+        context: Union[Dict[str, Any], None] = None,
+        by_alias: bool = False,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+        round_trip: bool = False,
+        warnings: Union[bool, Literal["none", "warn", "error"]] = True,
+        serialize_as_any: bool = False,
+    ) -> Dict[str, Any]:
+        data = super().model_dump(
+            mode=mode,
+            include=include,
+            exclude=exclude,
+            context=context,
+            by_alias=by_alias,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+            round_trip=round_trip,
+            warnings=warnings,
+            serialize_as_any=serialize_as_any,
+        )
+        relations_mappers = _get_relations_mapper(self.__class__)
+        for k, field in relations_mappers.items():
+            if exclude is None or k not in exclude:
+                try:
+                    value = getattr(self, k, None)
+                except DetachedInstanceError:
+                    # ignore lazy loaded values
+                    continue
+
+                if value is not None or not exclude_none:
+                    data[k] = _serialize_embedded(
+                        value,
+                        field=field,
+                        mode=mode,
+                        context=context,
+                        by_alias=by_alias,
+                        exclude_unset=exclude_unset,
+                        exclude_defaults=exclude_defaults,
+                        exclude_none=exclude_none,
+                        round_trip=round_trip,
+                        warnings=warnings,
+                        serialize_as_any=serialize_as_any,
+                    )
+
+        return data
 
 
 def SQLModel(
@@ -494,6 +550,37 @@ def _parse_embedded(
         # add a foreign key value to link back to parent
         linked_value = _with_value(value, fk_field, fk_value)
         return field_model.model_validate(linked_value)
+
+    raise NotImplementedError(
+        f"relationship of type annotation {wrapper_type} not supported yet"
+    )
+
+
+def _serialize_embedded(
+    value: Iterable[_SQLModel] | _SQLModel, field: Any, **kwargs
+) -> Iterable[dict] | dict | None:
+    """Serializes embedded items that can be a single item or many into SQLModels
+
+    Args:
+        value: the value to serialize
+        field: the field on which these embedded items are
+        kwargs: extra key-word args to pass to model_dump()
+
+    Returns:
+        An iterable of dicts or a single dict
+        or None if value is None
+    """
+    if value is None:
+        return None
+
+    props = field.property  # type: RelationshipProperty[Any]
+    wrapper_type = props.collection_class
+
+    if issubclass(wrapper_type, (list, tuple, set)):
+        # add a foreign key values to link back to parent
+        return wrapper_type([v.model_dump(**kwargs) for v in value])
+    elif wrapper_type is None:
+        return value.model_dump(**kwargs)
 
     raise NotImplementedError(
         f"relationship of type annotation {wrapper_type} not supported yet"
