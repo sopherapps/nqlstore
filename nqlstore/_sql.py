@@ -1,5 +1,6 @@
 """SQL implementation"""
 
+import sys
 from typing import Any, Iterable, TypeVar, Union
 
 from pydantic import create_model
@@ -205,6 +206,8 @@ def SQLModel(
     # FIXME: Handle scenario where a pk is defined
     return create_model(
         name,
+        # module of the calling function
+        __module__=sys._getframe(1).f_globals["__name__"],
         __doc__=schema.__doc__,
         __cls_kwargs__={"table": True},
         __base__=(_SQLModelMeta,),

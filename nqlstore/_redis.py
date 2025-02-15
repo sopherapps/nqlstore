@@ -146,9 +146,10 @@ def HashModel(
     """
     fields = get_field_definitions(schema, embedded_models=None, is_for_redis=True)
 
-    # FIXME: Handle scenario where a pk is defined
     return create_model(
         name,
+        # module of the calling function
+        __module__=sys._getframe(1).f_globals["__name__"],
         __doc__=schema.__doc__,
         __base__=(_HashModelMeta,),
         id=(str | None, _RedisField(default_factory=_from_pk, index=True)),
@@ -189,9 +190,10 @@ def JsonModel(
         schema, embedded_models=embedded_models, is_for_redis=True
     )
 
-    # FIXME: Handle scenario where a pk is defined
     return create_model(
         name,
+        # module of the calling function
+        __module__=sys._getframe(1).f_globals["__name__"],
         __doc__=schema.__doc__,
         __base__=(_JsonModelMeta,),
         id=(str | None, _RedisField(default_factory=_from_pk, index=True)),
@@ -223,9 +225,10 @@ def EmbeddedJsonModel(
     """
     fields = get_field_definitions(schema, embedded_models=None, is_for_redis=True)
 
-    # FIXME: Handle scenario where a pk is defined
     return create_model(
         name,
+        # module of the calling function
+        __module__=sys._getframe(1).f_globals["__name__"],
         __doc__=schema.__doc__,
         __base__=(_EmbeddedJsonModel,),
         id=(str | None, _RedisField(default_factory=_from_pk, index=True)),

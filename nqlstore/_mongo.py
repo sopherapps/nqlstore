@@ -1,6 +1,7 @@
 """MongoDB implementation"""
 
 import re
+import sys
 from typing import Any, Iterable, Mapping, TypeVar
 
 from pydantic import BaseModel
@@ -241,6 +242,8 @@ def MongoModel(
 
     model = create_model(
         name,
+        # module of the calling function
+        __module__=sys._getframe(1).f_globals["__name__"],
         __doc__=schema.__doc__,
         __base__=(Document,),
         **fields,
@@ -282,6 +285,8 @@ def EmbeddedMongoModel(
 
     return create_model(
         name,
+        # module of the calling function
+        __module__=sys._getframe(1).f_globals["__name__"],
         __doc__=schema.__doc__,
         __base__=(_EmbeddedMongoModel,),
         **fields,
