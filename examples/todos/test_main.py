@@ -1,10 +1,23 @@
 from typing import Any
 
 import pytest
-from conftest import STORE_MODEL_PAIRS, STORE_MODEL_TODO_LISTS_TUPLES, TODO_LISTS
+from conftest import TODO_LISTS, lazy_fixture
 from fastapi.testclient import TestClient
+from main import MongoTodoList, RedisTodoList, SqlTodoList
 
 from nqlstore._base import BaseModel, BaseStore
+
+STORE_MODEL_PAIRS = [
+    (lazy_fixture("sql_store"), SqlTodoList),
+    (lazy_fixture("redis_store"), RedisTodoList),
+    (lazy_fixture("mongo_store"), MongoTodoList),
+]
+
+STORE_MODEL_TODO_LISTS_TUPLES = [
+    (lazy_fixture("sql_store"), SqlTodoList, lazy_fixture("sql_todolists")),
+    (lazy_fixture("redis_store"), RedisTodoList, lazy_fixture("redis_todolists")),
+    (lazy_fixture("mongo_store"), MongoTodoList, lazy_fixture("mongo_todolists")),
+]
 
 _POST_PARAMS = [
     (store, model, todolist)
@@ -48,12 +61,11 @@ async def test_create_sql_todolist(
                 )
             ],
         }
-        db_record = await store.find(model, query={"id": got["id"]}, limit=1)[
-            0
-        ].model_dump()
+        db_results = await store.find(model, query={"id": got["id"]}, limit=1)
+        record_in_db = db_results[0].model_dump()
 
         assert got == expected
-        assert db_record == expected
+        assert record_in_db == expected
 
 
 @pytest.mark.asyncio
@@ -80,9 +92,8 @@ async def test_update_todolist(
 
         got = response.json()
         expected = todolist.model_copy(update=update).model_dump()
-        record_in_db = await store.find(model, query={"id": id_}, limit=1)[
-            0
-        ].model_dump()
+        db_results = await store.find(model, query={"id": id_}, limit=1)
+        record_in_db = db_results[0].model_dump()
 
         assert got == expected
         assert record_in_db == expected
@@ -107,10 +118,10 @@ async def test_delete_todolist(
 
         got = response.json()
         expected = todolist.model_dump()
-        record_in_db = await store.find(model, query={"id": id_}, limit=1)
+        db_results = await store.find(model, query={"id": id_}, limit=1)
 
         assert got == expected
-        assert record_in_db == []
+        assert db_results == []
 
 
 @pytest.mark.asyncio
@@ -132,9 +143,8 @@ async def test_read_one_todolist(
 
         got = response.json()
         expected = todolist.model_dump()
-        record_in_db = await store.find(model, query={"id": id_}, limit=1)[
-            0
-        ].model_dump()
+        db_results = await store.find(model, query={"id": id_}, limit=1)
+        record_in_db = db_results[0].model_dump()
 
         assert got == expected
         assert record_in_db == expected

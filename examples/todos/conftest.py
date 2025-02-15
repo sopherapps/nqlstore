@@ -1,26 +1,13 @@
 """Fixtures for tests"""
 
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from main import MongoTodoList, RedisTodoList, SqlTodoList
-from pytest_lazyfixture import lazy_fixture
 
 from nqlstore import MongoStore, RedisStore, SQLStore
-
-STORE_MODEL_PAIRS = [
-    (lazy_fixture("sql_store"), SqlTodoList),
-    (lazy_fixture("redis_store"), RedisTodoList),
-    (lazy_fixture("mongo_store"), MongoTodoList),
-]
-
-STORE_MODEL_TODO_LISTS_TUPLES = [
-    (lazy_fixture("sql_store"), SqlTodoList, lazy_fixture("sql_todolists")),
-    (lazy_fixture("redis_store"), RedisTodoList, lazy_fixture("redis_todolists")),
-    (lazy_fixture("mongo_store"), MongoTodoList, lazy_fixture("mongo_todolists")),
-]
 
 TODO_LISTS: list[dict[str, Any]] = [
     {"name": "School Work"},
@@ -88,7 +75,7 @@ async def sql_todolists(sql_store: SQLStore):
 @pytest_asyncio.fixture()
 async def mongo_todolists(mongo_store: MongoStore):
     """A list of todolists in the mongo store"""
-    from .main import MongoTodoList
+    from main import MongoTodoList
 
     records = await mongo_store.insert(MongoTodoList, TODO_LISTS)
     yield records
@@ -97,7 +84,42 @@ async def mongo_todolists(mongo_store: MongoStore):
 @pytest_asyncio.fixture()
 async def redis_todolists(redis_store: RedisStore):
     """A list of todolists in the redis store"""
-    from .main import RedisTodoList
+    from main import RedisTodoList
 
     records = await redis_store.insert(RedisTodoList, TODO_LISTS)
     yield records
+
+
+@dataclass(frozen=True)
+class LazyFixture:
+    """A fixture to be resolved lazily."""
+
+    name: str
+
+
+def lazy_fixture(name: str) -> LazyFixture:
+    """Create a lazy fixture."""
+    return LazyFixture(name)
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_fixture_setup(
+    fixturedef: pytest.FixtureDef,
+    request: pytest.FixtureRequest,
+) -> object | None:
+    """Pytest hook to load lazy fixtures during setup
+
+    https://docs.pytest.org/en/latest/reference/reference.html#pytest.hookspec.pytest_fixture_setup
+    Stops at first non-None result
+
+    Args:
+        fixturedef: fixture definition object.
+        request: fixture request object.
+
+    Returns:
+        fixture value or None.
+    """
+    param = getattr(request, "param", None)
+    if isinstance(param, LazyFixture):
+        request.param = request.getfixturevalue(param.name)
+    return None
