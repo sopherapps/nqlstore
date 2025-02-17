@@ -1,5 +1,6 @@
 """Fixtures for tests"""
 
+import asyncio
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -7,6 +8,8 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+from main import get_redis_store
+from models import MongoTodo, MongoTodoList, RedisTodo, RedisTodoList
 
 from nqlstore import MongoStore, RedisStore, SQLStore
 
@@ -27,16 +30,18 @@ TODO_LISTS: list[dict[str, Any]] = [
 def client_with_sql():
     """The fastapi test client when SQL is enabled"""
     _reset_env()
-    os.environ["SQL_URL"] = "sqlite+aiosqlite:///:memory:"
+    os.environ["SQL_URL"] = "sqlite+aiosqlite:///test.db"
 
     from main import app
 
     yield TestClient(app)
     _reset_env()
 
+    os.remove("test.db")
 
-@pytest.fixture
-def client_with_redis():
+
+@pytest_asyncio.fixture()
+async def client_with_redis(event_loop):
     """The fastapi test client when redis is enabled"""
     _reset_env()
     redis_url = "redis://localhost:6379/0"
@@ -53,7 +58,7 @@ def client_with_redis():
 
 
 @pytest.fixture
-def client_with_mongo():
+def client_with_mongo(event_loop):
     """The fastapi test client when mongodb is enabled"""
     _reset_env()
 
@@ -77,23 +82,37 @@ def sql_store(client_with_sql: TestClient):
     """The sql store stored in memory"""
     # using context manager to ensure on_startup runs
     with client_with_sql as client:
-        yield client.app.state.SQL_STORE
+        yield client.app.state.sql
 
 
-@pytest.fixture
-def mongo_store(client_with_mongo: TestClient):
+@pytest_asyncio.fixture()
+async def mongo_store(client_with_mongo: TestClient):
     """The mongodb store. Requires a running instance of mongodb"""
     # using context manager to ensure on_startup runs
     with client_with_mongo as client:
-        yield client.app.state.MONGO_STORE
+        mongo_url = "mongodb://localhost:27017"
+        mongo_db = "testing"
+
+        mongo_store = MongoStore(uri=mongo_url, database=mongo_db)
+        await mongo_store.register([MongoTodoList, MongoTodo])
+        # client.app.state.mongo = mongo_store
+
+        yield mongo_store
 
 
-@pytest.fixture
-def redis_store(client_with_redis: TestClient):
+@pytest_asyncio.fixture
+async def redis_store(client_with_redis: TestClient):
     """The redis store. Requires a running instance of redis stack"""
     # using context manager to ensure on_startup runs
-    with client_with_redis as client:
-        yield client.app.state.REDIS_STORE
+    # with client_with_redis as client:
+    redis_url = "redis://localhost:6379/0"
+
+    store = RedisStore(redis_url)
+    await store.register([RedisTodoList, RedisTodo])
+    #
+    # client.app.state.redis = store
+    # yield client.app.state.redis
+    yield store
 
 
 @pytest_asyncio.fixture()
@@ -115,12 +134,14 @@ async def mongo_todolists(mongo_store: MongoStore):
 
 
 @pytest_asyncio.fixture()
-async def redis_todolists(redis_store: RedisStore):
+async def redis_todolists(client_with_redis: TestClient):
     """A list of todolists in the redis store"""
     from main import RedisTodoList
 
-    records = await redis_store.insert(RedisTodoList, TODO_LISTS)
-    yield records
+    with client_with_redis as client:
+
+        records = await client.app.state.redis.insert(RedisTodoList, TODO_LISTS)
+        yield records
 
 
 @dataclass(frozen=True)
