@@ -1,11 +1,14 @@
 """MongoDB implementation"""
 
+import abc
 import re
 import sys
 from typing import Any, Iterable, Mapping, TypeVar
 
+from motor.motor_asyncio import AsyncIOMotorCollection
 from pydantic import BaseModel
 from pydantic import Field as _Field
+from pydantic import field_serializer
 from pydantic.main import ModelT, create_model
 
 from ._base import BaseStore
@@ -78,129 +81,112 @@ class MongoStore(BaseStore):
         model: type[_T],
         items: Iterable[_T | dict],
         session: AsyncIOMotorClientSession | None = None,
-        link_rule: WriteRules = WriteRules.DO_NOTHING,
         **pymongo_kwargs: Any,
     ) -> list[_T]:
+        # parse them so that any default values from the model definition are added,
+        # and proper validation is done
         parsed_items = [
             v if isinstance(v, model) else model.model_validate(v) for v in items
         ]
-        results = await model.insert_many(
-            parsed_items, session=session, link_rule=link_rule, **pymongo_kwargs
+        items_as_dicts = [v.model_dump() for v in parsed_items]
+        collection = self._get_collection(model)
+
+        insert_result = await collection.insert_many(
+            items_as_dicts, session=session, **pymongo_kwargs
         )
-        return await model.find(
-            {"_id": {"$in": results.inserted_ids}}, session=session
+        raw_results = await collection.find(
+            {"_id": {"$in": insert_result.inserted_ids}}, session=session
         ).to_list()
+        return [model.model_validate(v) for v in raw_results]
 
     async def find(
         self,
         model: type[_T],
-        *filters: _Filter,
         query: _Filter | None = None,
         skip: int = 0,
-        limit: int | None = None,
+        limit: int = 0,
         sort: None | str | list[tuple[str, SortDirection]] = None,
         session: AsyncIOMotorClientSession | None = None,
-        ignore_cache: bool = False,
-        fetch_links: bool = False,
-        with_children: bool = False,
-        lazy_parse: bool = False,
-        nesting_depth: int | None = None,
-        nesting_depths_per_field: dict[str, int] | None = None,
         **pymongo_kwargs: Any,
     ) -> list[_T]:
-        all_filters = filters
-        if query:
-            all_filters = [*all_filters, query]
+        if query is None:
+            query = {}
 
-        return await model.find(
-            *all_filters,
+        collection = self._get_collection(model)
+
+        raw_results = await collection.find(
+            query,
             skip=skip,
             limit=limit,
             session=session,
-            ignore_cache=ignore_cache,
-            fetch_links=fetch_links,
-            with_children=with_children,
-            lazy_parse=lazy_parse,
-            nesting_depth=nesting_depth,
-            nesting_depths_per_field=nesting_depths_per_field,
+            sort=sort,
             **pymongo_kwargs,
         ).to_list()
+
+        return [model.model_validate(v) for v in raw_results]
 
     async def update(
         self,
         model: type[_T],
-        *filters: _Filter,
         query: _Filter | None = None,
         updates: dict | None = None,
         session: AsyncIOMotorClientSession | None = None,
-        ignore_cache: bool = False,
-        fetch_links: bool = False,
-        with_children: bool = False,
-        lazy_parse: bool = False,
-        nesting_depth: int | None = None,
-        nesting_depths_per_field: dict[str, int] | None = None,
-        bulk_writer: BulkWriter | None = None,
         upsert=False,
         **pymongo_kwargs: Any,
     ) -> list[_T]:
         if updates is None:
             updates = {}
 
-        all_filters = filters
-        if query:
-            all_filters = [*all_filters, query]
+        if query is None:
+            query = {}
 
         mongo_updates = _to_mongo_updates(updates)
 
-        cursor = model.find(
-            *all_filters,
+        collection = self._get_collection(model)
+        query_cursor = collection.find(
+            query, projection={"_id": True}, session=session, **pymongo_kwargs
+        )
+        ids = [v["_id"] async for v in query_cursor]
+
+        await collection.update_many(
+            query,
+            update=mongo_updates,
             session=session,
-            ignore_cache=ignore_cache,
-            fetch_links=fetch_links,
-            with_children=with_children,
-            lazy_parse=lazy_parse,
-            nesting_depth=nesting_depth,
-            nesting_depths_per_field=nesting_depths_per_field,
+            upsert=upsert,
             **pymongo_kwargs,
         )
-        ids = [v.id async for v in cursor.project(_IdOnly)]
-        await cursor.update(
-            mongo_updates, session=session, bulk_writer=bulk_writer, upsert=upsert
+        raw_results = collection.find(
+            {"_id": {"$in": ids}}, session=session, **pymongo_kwargs
         )
-        return await model.find({"_id": {"$in": ids}}).to_list()
+        return [model.model_validate(v) async for v in raw_results]
 
     async def delete(
         self,
         model: type[_T],
-        *filters: _Filter,
         query: _Filter | None = None,
         session: AsyncIOMotorClientSession | None = None,
-        ignore_cache: bool = False,
-        fetch_links: bool = False,
-        with_children: bool = False,
-        lazy_parse: bool = False,
-        nesting_depth: int | None = None,
-        nesting_depths_per_field: dict[str, int] | None = None,
-        bulk_writer: BulkWriter | None = None,
         **pymongo_kwargs: Any,
     ) -> list[_T]:
-        all_filters = filters
-        if query:
-            all_filters = [*all_filters, query]
-        cursor = model.find(
-            *all_filters,
-            session=session,
-            ignore_cache=ignore_cache,
-            fetch_links=fetch_links,
-            with_children=with_children,
-            lazy_parse=lazy_parse,
-            nesting_depth=nesting_depth,
-            nesting_depths_per_field=nesting_depths_per_field,
-            **pymongo_kwargs,
-        )
-        deleted_items = await cursor.to_list()
-        await cursor.delete(session=session, bulk_writer=bulk_writer)
+        if query is None:
+            query = {}
+
+        collection = self._get_collection(model)
+        query_cursor = collection.find(query, session=session, **pymongo_kwargs)
+        deleted_items = [model.model_validate(v) async for v in query_cursor]
+        await collection.delete_many(query, session=session, **pymongo_kwargs)
         return deleted_items
+
+    def _get_collection(self, model: type[_T]) -> AsyncIOMotorCollection:
+        """Gets the collection for the given model
+
+        Args:
+            model: the model class whose collection is to be obtained
+
+        Returns:
+            the AsyncIOMotorCollection for the given model
+        """
+        collection_name = model.get_collection_name()
+        return self._db[collection_name]
 
 
 class _EmbeddedMongoModel(BaseModel):
