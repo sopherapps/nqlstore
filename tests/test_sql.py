@@ -265,13 +265,13 @@ async def test_delete_native(sql_store, inserted_sql_libs):
     """Delete should delete the items that match the native filter"""
     # in immediate response
     # NOTE: redis startswith/contains on single letters is not supported by redis
-    got = await sql_store.delete(SqlLibrary, SqlLibrary.name.startswith("bu"))
-    expected = [v for v in inserted_sql_libs if v.name.lower().startswith("bu")]
+    got = await sql_store.delete(SqlLibrary, SqlLibrary.address.startswith("Ho"))
+    expected = [v for v in inserted_sql_libs if v.address.startswith("Ho")]
     assert _ordered(got) == _ordered(expected)
 
     # all data in database
     got = await sql_store.find(SqlLibrary)
-    expected = [v for v in inserted_sql_libs if not v.name.lower().startswith("bu")]
+    expected = [v for v in inserted_sql_libs if not v.address.startswith("Ho")]
     assert _ordered(got) == _ordered(expected)
 
 

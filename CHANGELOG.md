@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - Fixed error: "got Future <Future pending> attached to a different loop" when `MongoStore.insert()`, `MongoStore.find()`, `MongoStore.update()`, `MongoStore.delete()`
   are called especially during tests that create different event loops.
+- Fixed `SQLStore.delete()` to return any nested items that were deleted.
 
 ## [0.1.4] - 2025-02-15
 

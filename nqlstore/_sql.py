@@ -229,6 +229,8 @@ class SQLStore(BaseStore):
             if query:
                 filters = (*filters, *self._parser.to_sql(model, query=query))
 
+            deleted_items = await self.find(model, *filters)
+
             # Construct filters that have sub queries
             relations = _get_relations(model)
             rel_filters, non_rel_filters = _sieve_rel_from_non_rel_filters(
@@ -244,15 +246,13 @@ class SQLStore(BaseStore):
             if len(rel_filters) > 0:
                 exec_options = {"is_delete_using": True}
 
-            cursor = await session.stream(
+            await session.stream(
                 delete(model)
                 .where(*non_rel_filters, *rel_filters)
-                .returning(model.__table__)
                 .execution_options(**exec_options),
             )
-            results = await cursor.all()
             await session.commit()
-            return [model(**row._mapping) for row in results]
+            return deleted_items
 
 
 class _SQLModelMeta(_SQLModel):
