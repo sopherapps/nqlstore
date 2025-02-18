@@ -25,7 +25,7 @@ async def test_register(mongo_store, inserted_mongo_libs):
 @pytest.mark.skipif(not is_lib_installed("beanie"), reason="Requires beanie.")
 async def test_find(mongo_store, inserted_mongo_libs):
     """Find should find the items that match the filter"""
-    got = await mongo_store.find(MongoLibrary, {}, query={}, skip=1)
+    got = await mongo_store.find(MongoLibrary, {}, skip=1)
     expected = [v for idx, v in enumerate(inserted_mongo_libs) if idx >= 1]
     assert got == expected
 

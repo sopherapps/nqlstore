@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added [todos](./examples/todos) example application
+
+### Changed
+
+- Replaced the second required argument of `MongoStore.find()`, 
+  `MongoStore.update()`, `MongoStore.delete()`with their first optional 
+  key-word argument `query`.
+- Changed the `limit` parameter of the `MongoStore.find()` to be by default 0.
+- Removed the `Beanie-odm`-specific arguments passed to `MongoStore.insert()`,
+  `MongoStore.find()`, `MongoStore.update()`, `MongoStore.delete()`.
+
+### Fixed
+
+- Fixed error: "got Future <Future pending> attached to a different loop" when
+  `MongoStore.insert()`, `MongoStore.find()`, `MongoStore.update()`, `MongoStore.delete()`
+  are called especially during tests that create different event loops.
+- Fixed `SQLStore.delete()` to return any nested items that were deleted.
+- Fixed error: "got Future <Future pending> attached to a different loop" when
+  `RedisStore.insert()`, `RedisStore.find()`, `RedisStore.update()`, `RedisStore.delete()`
+  are called especially during tests that create different event loops.
+
 ## [0.1.4] - 2025-02-15
 
 ### Fixed

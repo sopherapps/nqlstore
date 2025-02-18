@@ -33,19 +33,24 @@ pip install -r requirements.txt
 - To use with redis, install [redis stack](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/) 
   and start its server in another terminal.
 
-- Start the application, selecting which database(s) to use.  
+- Start the application, set the URL's for the database(s) to use.  
+- _SQL_URL = f"sqlite+aiosqlite:///{_SQL_DB}"
+_REDIS_URL = "redis://localhost:6379/0"
+_MONGO_URL = "mongodb://localhost:27017"
+_MONGO_DB = "testing"
   Options are:
-  - `--sql` for [SQLite](https://www.sqlite.org/). This the default when no option is passed
-  - `--mongo` for [MongoDB](https://www.mongodb.com/products/self-managed/community-edition)
-  - `--redis` for [Redis](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/)  
+  - `SQL_URL` for [SQLite](https://www.sqlite.org/).
+  - `MONGO_URL` (required) and `MONGO_DB` (default: "todos") for [MongoDB](https://www.mongodb.com/products/self-managed/community-edition)
+  - `REDIS_URL` for [Redis](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/).
   
-  _It is possible to use multiple databases at the same time. Just pass multiple options_
+  _It is possible to use multiple databases at the same time. Just set multiple environment variables_
 
 ```shell
-python main.py --sql # for SQL
-# python main.py --redis # for redis
-# python main.py --mongo # for mongoDB
-# python main.py --sql --mongo # for SQL and mongoDB at the sametime
+export SQL_URL="sqlite+aiosqlite:///test.db"
+#export MONGO_URL="mongodb://localhost:27017"
+#export MONGO_DB="testing"
+export REDIS_URL="redis://localhost:6379/0"
+fastapi dev main.py
 ```
 
 ## License

@@ -183,3 +183,6 @@ menv/
 
 # pyenv
 .python-version
+
+# sqlite test db
+test.db

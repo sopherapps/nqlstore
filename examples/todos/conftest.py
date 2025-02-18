@@ -1,12 +1,19 @@
 """Fixtures for tests"""
 
 import os
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+from models import (
+    MongoTodo,
+    MongoTodoList,
+    RedisTodo,
+    RedisTodoList,
+    SqlTodo,
+    SqlTodoList,
+)
 
 from nqlstore import MongoStore, RedisStore, SQLStore
 
@@ -22,62 +29,91 @@ TODO_LISTS: list[dict[str, Any]] = [
     {"name": "Boo", "todos": [{"title": "Talk endlessly till daybreak"}]},
 ]
 
-
-@pytest.fixture
-def sql_store():
-    """The sql store stored in memory"""
-    sql_url = "sqlite+aiosqlite:///:memory:"
-    os.environ["SQL_URL"] = sql_url
-
-    store = SQLStore(uri=sql_url)
-    yield store
-
-    # cleanup
-    os.environ["SQL_URL"] = ""
+_SQL_DB = "test.db"
+_SQL_URL = f"sqlite+aiosqlite:///{_SQL_DB}"
+_REDIS_URL = "redis://localhost:6379/0"
+_MONGO_URL = "mongodb://localhost:27017"
+_MONGO_DB = "testing"
 
 
 @pytest.fixture
-def mongo_store():
-    """The mongodb store. Requires a running instance of mongodb"""
-    import pymongo
+def client_with_sql():
+    """The fastapi test client when SQL is enabled"""
+    _reset_env()
+    os.environ["SQL_URL"] = _SQL_URL
 
-    mongo_url = "mongodb://localhost:27017"
-    mongo_db = "testing"
-    os.environ["MONGO_URL"] = mongo_url
-    os.environ["MONGO_DB"] = mongo_db
-
-    store = MongoStore(uri=mongo_url, database=mongo_db)
-    yield store
-
-    # clean up after the test
-    client = pymongo.MongoClient("mongodb://localhost:27017")  # type: ignore
-    client.drop_database("testing")
-    os.environ["MONGO_URL"] = ""
-
-
-@pytest.fixture
-def redis_store():
-    """The redis store. Requires a running instance of redis stack"""
-    import redis
-
-    redis_url = "redis://localhost:6379/0"
-    os.environ["REDIS_URL"] = redis_url
-
-    store = RedisStore(uri=redis_url)
-    yield store
-
-    # clean up after the test
-    client = redis.Redis("localhost", 6379, 0)
-    client.flushall()
-    os.environ["REDIS_URL"] = ""
-
-
-@pytest.fixture
-def client():
-    """The fastapi test client"""
     from main import app
 
     yield TestClient(app)
+    _reset_env()
+
+
+@pytest_asyncio.fixture
+async def client_with_redis():
+    """The fastapi test client when redis is enabled"""
+    _reset_env()
+    os.environ["REDIS_URL"] = _REDIS_URL
+
+    from main import app
+
+    yield TestClient(app)
+    _reset_env()
+
+
+@pytest.fixture
+def client_with_mongo():
+    """The fastapi test client when mongodb is enabled"""
+    _reset_env()
+
+    os.environ["MONGO_URL"] = _MONGO_URL
+    os.environ["MONGO_DB"] = _MONGO_DB
+
+    from main import app
+
+    yield TestClient(app)
+    _reset_env()
+
+
+@pytest_asyncio.fixture()
+async def sql_store():
+    """The sql store stored in memory"""
+    store = SQLStore(uri=_SQL_URL)
+
+    await store.register([SqlTodoList, SqlTodo])
+    yield store
+
+    # clean up
+    os.remove(_SQL_DB)
+
+
+@pytest_asyncio.fixture()
+async def mongo_store():
+    """The mongodb store. Requires a running instance of mongodb"""
+    import pymongo
+
+    mongo_store = MongoStore(uri=_MONGO_URL, database=_MONGO_DB)
+    await mongo_store.register([MongoTodoList, MongoTodo])
+
+    yield mongo_store
+
+    # clean up
+    client = pymongo.MongoClient(_MONGO_URL)  # type: ignore
+    client.drop_database(_MONGO_DB)
+
+
+@pytest_asyncio.fixture
+async def redis_store():
+    """The redis store. Requires a running instance of redis stack"""
+    import redis
+
+    store = RedisStore(_REDIS_URL)
+    await store.register([RedisTodoList, RedisTodo])
+
+    yield store
+
+    # clean up
+    client = redis.Redis("localhost", 6379, 0)
+    client.flushall()
 
 
 @pytest_asyncio.fixture()
@@ -107,36 +143,9 @@ async def redis_todolists(redis_store: RedisStore):
     yield records
 
 
-@dataclass(frozen=True)
-class LazyFixture:
-    """A fixture to be resolved lazily."""
-
-    name: str
-
-
-def lazy_fixture(name: str) -> LazyFixture:
-    """Create a lazy fixture."""
-    return LazyFixture(name)
-
-
-@pytest.hookimpl(tryfirst=True)
-def pytest_fixture_setup(
-    fixturedef: pytest.FixtureDef,
-    request: pytest.FixtureRequest,
-) -> object | None:
-    """Pytest hook to load lazy fixtures during setup
-
-    https://docs.pytest.org/en/latest/reference/reference.html#pytest.hookspec.pytest_fixture_setup
-    Stops at first non-None result
-
-    Args:
-        fixturedef: fixture definition object.
-        request: fixture request object.
-
-    Returns:
-        fixture value or None.
-    """
-    param = getattr(request, "param", None)
-    if isinstance(param, LazyFixture):
-        request.param = request.getfixturevalue(param.name)
-    return None
+def _reset_env():
+    """Resets the environment variables available to the app"""
+    os.environ["SQL_URL"] = ""
+    os.environ["REDIS_URL"] = ""
+    os.environ["MONGO_URL"] = ""
+    os.environ["MONGO_DB"] = "testing"

@@ -16,6 +16,7 @@ try:
     from aredis_om.model.model import Field as _RedisField
     from aredis_om.model.model import FieldInfo as _RedisFieldInfo
     from aredis_om.model.model import VectorFieldOptions, verify_pipeline_response
+    from redis.asyncio import Redis
     from redis.client import Pipeline
 except ImportError:
     from pydantic.fields import Field as _RedisField
@@ -33,6 +34,7 @@ except ImportError:
     Migrator = lambda *a, **k: dict(**k)
     get_redis_connection = lambda *a, **k: dict(**k)
     verify_pipeline_response = lambda *a, **k: dict(**k)
+    Redis = Any
 
 
 """
@@ -120,28 +122,19 @@ except ImportError:
 mongo imports; and their defaults if the 'beanie' package is not installed
 """
 try:
-    from beanie import (
-        BulkWriter,
-        Document,
-        PydanticObjectId,
-        SortDirection,
-        WriteRules,
-        init_beanie,
+    from beanie import Document, PydanticObjectId, SortDirection, init_beanie
+    from motor.motor_asyncio import (
+        AsyncIOMotorClient,
+        AsyncIOMotorClientSession,
+        AsyncIOMotorCollection,
     )
-    from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorClientSession
 except ImportError:
     from pydantic import BaseModel
 
     init_beanie = lambda *a, **k: dict(**k)
-    BulkWriter = Any
     SortDirection = Any
     AsyncIOMotorClient = lambda *a, **k: dict(**k)
     AsyncIOMotorClientSession = Any
+    AsyncIOMotorCollection = Any
     PydanticObjectId = Any
     Document = BaseModel
-
-    import enum
-
-    class WriteRules(str, enum.Enum):
-        DO_NOTHING = "DO_NOTHING"
-        WRITE = "WRITE"
