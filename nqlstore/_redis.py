@@ -2,7 +2,7 @@
 
 import abc
 import sys
-from typing import Any, Callable, Iterable, Type, TypeVar
+from typing import Any, Callable, Iterable, Type, get_args
 
 from pydantic.main import ModelT, create_model
 
@@ -12,6 +12,7 @@ from ._compat import (
     KNNExpression,
     Migrator,
     Pipeline,
+    Redis,
     _EmbeddedJsonModel,
     _HashModel,
     _JsonModel,
@@ -20,11 +21,43 @@ from ._compat import (
     get_redis_connection,
     verify_pipeline_response,
 )
-from ._field import get_field_definitions
+from ._field import FieldInfo, get_field_definitions
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
-_T = TypeVar("_T", bound=_RedisModel)
+
+class _RedisModelMeta(_RedisModel, abc.ABC):
+    id: str | None
+    __embedded_models__: dict
+
+    @classmethod
+    def set_db(cls, db: Redis):
+        """Sets the database of this model to the given database
+
+        This just ensures that the given model can be operated on
+        by the given database.
+
+        Args:
+            db: the redis database instance
+        """
+        try:
+            cls._meta.database = db
+        except AttributeError:
+            cls.Meta.database = db
+
+        # cache the embedded models on the class
+        embedded_models = getattr(cls, "__embedded_models__", None)
+        if embedded_models is None:
+            embedded_models = [
+                model
+                for field in cls.model_fields.values() # type: FieldInfo
+                for model in _get_embed_models(field.annotation)
+            ]
+            setattr(cls, "__embedded_models__", embedded_models)
+
+        # set db on embedded models also
+        for model in cls.__embedded_models__:
+            model.set_db(db)
 
 
 class RedisStore(BaseStore):
@@ -34,20 +67,22 @@ class RedisStore(BaseStore):
         super().__init__(uri, parser=parser, **kwargs)
         self._db = get_redis_connection(url=uri, **kwargs)
 
-    async def register(self, models: list[type[_T]], **kwargs):
+    async def register(self, models: list[type[_RedisModelMeta]], **kwargs):
         # set the redis instances of all passed models to the current redis instance
         for model in models:
-            model.Meta.database = self._db
+            model.set_db(self._db)
         await Migrator().run()
 
     async def insert(
         self,
-        model: type[_T],
-        items: Iterable[_T | dict],
+        model: type[_RedisModelMeta],
+        items: Iterable[_RedisModelMeta | dict],
         pipeline: Pipeline | None = None,
         pipeline_verifier: Callable[..., Any] = verify_pipeline_response,
         **kwargs,
-    ) -> list[_T]:
+    ) -> list[_RedisModelMeta]:
+        model.set_db(self._db)
+
         parsed_items = [
             v if isinstance(v, model) else model.model_validate(v) for v in items
         ]
@@ -58,7 +93,7 @@ class RedisStore(BaseStore):
 
     async def find(
         self,
-        model: type[_T],
+        model: type[_RedisModelMeta],
         *filters: Any | Expression,
         query: QuerySelector | None = None,
         skip: int = 0,
@@ -66,7 +101,9 @@ class RedisStore(BaseStore):
         sort: tuple[str] | None = None,
         knn: KNNExpression | None = None,
         **kwargs,
-    ) -> list[_T]:
+    ) -> list[_RedisModelMeta]:
+        model.set_db(self._db)
+
         nql_filters = ()
         if query:
             nql_filters = self._parser.to_redis(model, query=query)
@@ -82,13 +119,15 @@ class RedisStore(BaseStore):
 
     async def update(
         self,
-        model: type[_T],
+        model: type[_RedisModelMeta],
         *filters: Any | Expression,
         query: QuerySelector | None = None,
         updates: dict | None = None,
         knn: KNNExpression | None = None,
         **kwargs,
-    ) -> list[_T]:
+    ) -> list[_RedisModelMeta]:
+        model.set_db(self._db)
+
         if updates is None:
             updates = {}
 
@@ -107,13 +146,15 @@ class RedisStore(BaseStore):
 
     async def delete(
         self,
-        model: type[_T],
+        model: type[_RedisModelMeta],
         *filters: Any | Expression,
         query: QuerySelector | None = None,
         knn: KNNExpression | None = None,
         pipeline: Pipeline | None = None,
         **kwargs,
-    ) -> list[_T]:
+    ) -> list[_RedisModelMeta]:
+        model.set_db(self._db)
+
         nql_filters = ()
         if query:
             nql_filters = self._parser.to_redis(model, query=query)
@@ -124,10 +165,10 @@ class RedisStore(BaseStore):
         return matched_items
 
 
-class _HashModelMeta(_HashModel, abc.ABC):
+class _HashModelMeta(_HashModel, _RedisModelMeta, abc.ABC):
     """Base model for all HashModels. Helpful with typing"""
 
-    id: str | None
+    ...
 
 
 def HashModel(
@@ -159,10 +200,10 @@ def HashModel(
     )
 
 
-class _JsonModelMeta(_JsonModel, abc.ABC):
+class _JsonModelMeta(_JsonModel, _RedisModelMeta, abc.ABC):
     """Base model for all JsonModels. Helpful with typing"""
 
-    id: str | None
+    ...
 
 
 def JsonModel(
@@ -203,10 +244,10 @@ def JsonModel(
     )
 
 
-class _EmbeddedJsonModelMeta(_EmbeddedJsonModel, abc.ABC):
+class _EmbeddedJsonModelMeta(_EmbeddedJsonModel, _RedisModelMeta, abc.ABC):
     """Base model for all EmbeddedJsonModels. Helpful with typing"""
 
-    id: str | None
+    ...
 
 
 def EmbeddedJsonModel(
@@ -232,7 +273,7 @@ def EmbeddedJsonModel(
         # module of the calling function
         __module__=sys._getframe(1).f_globals["__name__"],
         __doc__=schema.__doc__,
-        __base__=(_EmbeddedJsonModel,),
+        __base__=(_EmbeddedJsonModelMeta,),
         id=(str | None, _RedisField(default_factory=_from_pk, index=True)),
         **fields,
     )
@@ -248,3 +289,20 @@ def _from_pk(data: dict) -> str | None:
         the pk in that data
     """
     return data.get("pk", None)
+
+
+def _get_embed_models(annot: Type) -> list[Type[_RedisModelMeta]]:
+    """Gets the embedded models in the annotation which might be a generic like list[Model]
+
+    Args:
+        annot: the annotation from which to get the embedded model within
+
+    Returns:
+        the embedded model in the annotation
+    """
+    try:
+        if issubclass(annot, _RedisModelMeta):
+            return [annot]
+    except TypeError:
+        return [item for arg in get_args(annot) for item in _get_embed_models(arg)]
+    return []

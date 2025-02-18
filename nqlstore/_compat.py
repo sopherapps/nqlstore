@@ -16,6 +16,7 @@ try:
     from aredis_om.model.model import Field as _RedisField
     from aredis_om.model.model import FieldInfo as _RedisFieldInfo
     from aredis_om.model.model import VectorFieldOptions, verify_pipeline_response
+    from redis.asyncio import Redis
     from redis.client import Pipeline
 except ImportError:
     from pydantic.fields import Field as _RedisField
@@ -33,6 +34,7 @@ except ImportError:
     Migrator = lambda *a, **k: dict(**k)
     get_redis_connection = lambda *a, **k: dict(**k)
     verify_pipeline_response = lambda *a, **k: dict(**k)
+    Redis = Any
 
 
 """
