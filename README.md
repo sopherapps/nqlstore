@@ -35,6 +35,13 @@ support your favourite database technology.
 - [RedisOM (_optional_)](https://redis.io/docs/latest/integrate/redisom-for-python/) - only required for [redis](https://redis.io/)
 - [Beanie (_optional_)](https://beanie-odm.dev/) - only required for [MongoDB](https://www.mongodb.com/)
 
+## Examples
+
+See the [`examples`](/examples) folder for some example applications.  
+Hopefully more examples will be added with time. Currently, we have the following:
+
+- [todos](./examples/todos)
+
 ## Quick Start
 
 ### Install NQLStore from Pypi 
@@ -328,7 +335,6 @@ libraries = await redis_store.delete(
 ## TODO
 
 - [ ] Add documentation site
-- [ ] Add example applications
 
 ## Contributions
 

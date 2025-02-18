@@ -50,7 +50,7 @@ class _RedisModelMeta(_RedisModel, abc.ABC):
         if embedded_models is None:
             embedded_models = [
                 model
-                for field in cls.model_fields.values() # type: FieldInfo
+                for field in cls.model_fields.values()  # type: FieldInfo
                 for model in _get_embed_models(field.annotation)
             ]
             setattr(cls, "__embedded_models__", embedded_models)

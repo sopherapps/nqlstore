@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added [todos](./examples/todos) example application
+
 ### Changed
 
 - Replaced the second required argument of `MongoStore.find()`, 

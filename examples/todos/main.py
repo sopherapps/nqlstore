@@ -1,18 +1,10 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 from typing import Annotated
 
 from beanie import PydanticObjectId
 from fastapi import Depends, FastAPI, HTTPException, Query, status
-from models import (
-    MongoTodo,
-    MongoTodoList,
-    RedisTodo,
-    RedisTodoList,
-    SqlTodo,
-    SqlTodoList,
-)
+from models import MongoTodoList, RedisTodoList, SqlTodoList
 from schemas import TodoList
 from stores import clear_stores, get_mongo_store, get_redis_store, get_sql_store
 
@@ -51,7 +43,7 @@ async def search(
 
         if redis:
             # redis's regex search is not mature so we use its full text search
-            results += await redis.find(RedisTodoList, RedisTodoList.name % q)
+            results += await redis.find(RedisTodoList, (RedisTodoList.name % f"*{q}*"))
 
         if mongo:
             results += await mongo.find(MongoTodoList, query=query)

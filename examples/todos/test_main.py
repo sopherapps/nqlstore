@@ -48,42 +48,42 @@ async def test_create_sql_todolist(
         assert record_in_db == expected
 
 
-# @pytest.mark.asyncio
-# @pytest.mark.parametrize("todolist", TODO_LISTS)
-# async def test_create_redis_todolist(
-#     client_with_redis: TestClient,
-#     redis_store: RedisStore,
-#     todolist: dict,
-# ):
-#     """POST to /todos creates a todolist in redis and returns it"""
-#     with client_with_redis as client:
-#         response = client.post("/todos", json=todolist)
-#
-#         got = response.json()
-#         todolist_id = got["id"]
-#         raw_todos = todolist.get("todos", [])
-#         resp_todos = got["todos"]
-#         expected = {
-#             "id": todolist_id,
-#             "name": todolist["name"],
-#             "pk": todolist_id,
-#             "todos": [
-#                 {
-#                     **raw,
-#                     "is_complete": "0",
-#                     "id": resp["id"],
-#                     "pk": resp["pk"],
-#                 }
-#                 for raw, resp in zip(raw_todos, resp_todos)
-#             ],
-#         }
-#
-#         db_query = {"id": {"$eq": todolist_id}}
-#         db_results = await redis_store.find(RedisTodoList, query=db_query, limit=1)
-#         record_in_db = db_results[0].model_dump()
-#
-#         assert got == expected
-#         assert record_in_db == expected
+@pytest.mark.asyncio
+@pytest.mark.parametrize("todolist", TODO_LISTS)
+async def test_create_redis_todolist(
+    client_with_redis: TestClient,
+    redis_store: RedisStore,
+    todolist: dict,
+):
+    """POST to /todos creates a todolist in redis and returns it"""
+    with client_with_redis as client:
+        response = client.post("/todos", json=todolist)
+
+        got = response.json()
+        todolist_id = got["id"]
+        raw_todos = todolist.get("todos", [])
+        resp_todos = got["todos"]
+        expected = {
+            "id": todolist_id,
+            "name": todolist["name"],
+            "pk": todolist_id,
+            "todos": [
+                {
+                    **raw,
+                    "is_complete": "0",
+                    "id": resp["id"],
+                    "pk": resp["pk"],
+                }
+                for raw, resp in zip(raw_todos, resp_todos)
+            ],
+        }
+
+        db_query = {"id": {"$eq": todolist_id}}
+        db_results = await redis_store.find(RedisTodoList, query=db_query, limit=1)
+        record_in_db = db_results[0].model_dump(mode="json")
+
+        assert got == expected
+        assert record_in_db == expected
 
 
 @pytest.mark.asyncio
@@ -162,34 +162,57 @@ async def test_update_sql_todolist(
         assert record_in_db == expected
 
 
-# @pytest.mark.asyncio
-# @pytest.mark.parametrize("client, store, model, todolists, index", _PUT_DEL_GET_PARAMS)
-# async def test_update_redis_todolist(
-#     client: TestClient,
-#     index: int,
-#     store: BaseStore,
-#     model: type[BaseModel],
-#     todolists: list[BaseModel],
-# ):
-#     """PUT to /todos/{id} updates the todolist of given id and returns updated version"""
-#     todolist = todolists[index]
-#     id_ = todolist.id
-#     todos = [{**v.model_dump(), "is_complete": "1"} for v in todolist.todos]
-#     update = {
-#         "name": "some other name",
-#         "todos": [*todos, {"title": "another one"}, {"title": "another one again"}],
-#     }
-#
-#     response = client.put(f"/todos/{id_}", json=update)
-#
-#     got = response.json()
-#     expected = todolist.model_copy(update=update).model_dump()
-#     db_query = {"id": {"$eq": id_}}
-#     db_results = await store.find(model, query=db_query, limit=1)
-#     record_in_db = db_results[0].model_dump()
-#
-#     assert got == expected
-#     assert record_in_db == expected
+@pytest.mark.asyncio
+@pytest.mark.parametrize("index", range(len(TODO_LISTS)))
+async def test_update_redis_todolist(
+    client_with_redis: TestClient,
+    redis_store: RedisStore,
+    redis_todolists: list[RedisTodoList],
+    index: int,
+):
+    """PUT to /todos/{id} updates the redis todolist of given id and returns updated version"""
+    with client_with_redis as client:
+        todolist = redis_todolists[index]
+        id_ = todolist.id
+        todos = [{**v.model_dump(), "is_complete": "1"} for v in todolist.todos]
+        update = {
+            "name": "some other name",
+            "todos": [*todos, {"title": "another one"}, {"title": "another one again"}],
+        }
+
+        response = client.put(f"/todos/{id_}", json=update)
+
+        got = response.json()
+        expected = {
+            **todolist.model_dump(mode="json"),
+            **update,
+            "todos": [
+                {
+                    **raw,
+                    "id": final["id"],
+                    "pk": final["pk"],
+                    "is_complete": raw.get("is_complete", final["is_complete"]),
+                }
+                for raw, final in zip(update["todos"], got["todos"])
+            ],
+        }
+        db_query = {"id": {"$eq": id_}}
+        db_results = await redis_store.find(RedisTodoList, query=db_query, limit=1)
+        record_in_db = db_results[0].model_dump(mode="json")
+        expected_in_db = {
+            **expected,
+            "todos": [
+                {
+                    **raw,
+                    "id": final["id"],
+                    "pk": final["pk"],
+                }
+                for raw, final in zip(expected["todos"], record_in_db["todos"])
+            ],
+        }
+
+    assert got == expected
+    assert record_in_db == expected_in_db
 
 
 @pytest.mark.asyncio
@@ -253,29 +276,29 @@ async def test_delete_sql_todolist(
         assert db_results == []
 
 
-# @pytest.mark.asyncio
-# @pytest.mark.parametrize("client, store, model, todolists, index", _PUT_DEL_GET_PARAMS)
-# async def test_delete_redis_todolist(
-#     client: TestClient,
-#     index: int,
-#     store: BaseStore,
-#     model: type[BaseModel],
-#     todolists: list[BaseModel],
-# ):
-#     """DELETE /todos/{id} deletes the redis todolist of given id and returns deleted version"""
-#     todolist = todolists[index]
-#     id_ = todolist.id
-#
-#     response = client.delete(f"/todos/{id_}")
-#
-#     got = response.json()
-#     expected = todolist.model_dump()
-#
-#     db_query = {"id": {"$eq": id_}}
-#     db_results = await store.find(model, query=db_query, limit=1)
-#
-#     assert got == expected
-#     assert db_results == []
+@pytest.mark.asyncio
+@pytest.mark.parametrize("index", range(len(TODO_LISTS)))
+async def test_delete_redis_todolist(
+    client_with_redis: TestClient,
+    redis_store: RedisStore,
+    redis_todolists: list[RedisTodoList],
+    index: int,
+):
+    """DELETE /todos/{id} deletes the redis todolist of given id and returns deleted version"""
+    with client_with_redis as client:
+        todolist = redis_todolists[index]
+        id_ = todolist.id
+
+        response = client.delete(f"/todos/{id_}")
+
+        got = response.json()
+        expected = todolist.model_dump(mode="json")
+
+        db_query = {"id": {"$eq": id_}}
+        db_results = await redis_store.find(RedisTodoList, query=db_query, limit=1)
+
+        assert got == expected
+        assert db_results == []
 
 
 @pytest.mark.asyncio
@@ -329,30 +352,30 @@ async def test_read_one_sql_todolist(
         assert record_in_db == expected
 
 
-# @pytest.mark.asyncio
-# @pytest.mark.parametrize("index", range(len(TODO_LISTS)))
-# async def test_read_one_redis_todolist(
-#     client_with_redis: TestClient,
-#     redis_store: RedisStore,
-#     redis_todolists: list[RedisTodoList],
-#     index: int,
-# ):
-#     """GET /todos/{id} gets the redis todolist of given id"""
-#     with client_with_redis as client:
-#         todolist = redis_todolists[index]
-#         id_ = todolist.id
-#
-#         response = client.get(f"/todos/{id_}")
-#
-#         got = response.json()
-#         expected = todolist.model_dump(mode="json")
-#
-#         db_query = {"id": {"$eq": id_}}
-#         db_results = await redis_store.find(RedisTodoList, query=db_query, limit=1)
-#         record_in_db = db_results[0].model_dump(mode="json")
-#
-#         assert got == expected
-#         assert record_in_db == expected
+@pytest.mark.asyncio
+@pytest.mark.parametrize("index", range(len(TODO_LISTS)))
+async def test_read_one_redis_todolist(
+    client_with_redis: TestClient,
+    redis_store: RedisStore,
+    redis_todolists: list[RedisTodoList],
+    index: int,
+):
+    """GET /todos/{id} gets the redis todolist of given id"""
+    with client_with_redis as client:
+        todolist = redis_todolists[index]
+        id_ = todolist.id
+
+        response = client.get(f"/todos/{id_}")
+
+        got = response.json()
+        expected = todolist.model_dump(mode="json")
+
+        db_query = {"id": {"$eq": id_}}
+        db_results = await redis_store.find(RedisTodoList, query=db_query, limit=1)
+        record_in_db = db_results[0].model_dump(mode="json")
+
+        assert got == expected
+        assert record_in_db == expected
 
 
 @pytest.mark.asyncio
@@ -401,22 +424,24 @@ async def test_search_sql_by_name(
         assert got == expected
 
 
-# @pytest.mark.asyncio
-# @pytest.mark.parametrize("q", _SEARCH_TERMS)
-# async def test_search_redis_by_name(
-#     client_with_redis: TestClient,
-#     redis_store: RedisStore,
-#     redis_todolists: list[RedisTodoList],
-#     q: str,
-# ):
-#     """GET /todos?q={} gets all redis todolists with name containing search item"""
-#     with client_with_redis as client:
-#         response = client.get(f"/todos?q={q}")
-#
-#         got = response.json()
-#         expected = [v.model_dump(mode="json") for v in redis_todolists if q in v.name.lower()]
-#
-#         assert got == expected
+@pytest.mark.asyncio
+@pytest.mark.parametrize("q", _SEARCH_TERMS)
+async def test_search_redis_by_name(
+    client_with_redis: TestClient,
+    redis_store: RedisStore,
+    redis_todolists: list[RedisTodoList],
+    q: str,
+):
+    """GET /todos?q={} gets all redis todolists with name containing search item"""
+    with client_with_redis as client:
+        response = client.get(f"/todos?q={q}")
+
+        got = response.json()
+        expected = [
+            v.model_dump(mode="json") for v in redis_todolists if q in v.name.lower()
+        ]
+
+        assert got == expected
 
 
 @pytest.mark.asyncio
