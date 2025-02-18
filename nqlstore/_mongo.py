@@ -1,25 +1,21 @@
 """MongoDB implementation"""
 
-import abc
 import re
 import sys
 from typing import Any, Iterable, Mapping, TypeVar
 
-from motor.motor_asyncio import AsyncIOMotorCollection
 from pydantic import BaseModel
 from pydantic import Field as _Field
-from pydantic import field_serializer
 from pydantic.main import ModelT, create_model
 
 from ._base import BaseStore
 from ._compat import (
     AsyncIOMotorClient,
     AsyncIOMotorClientSession,
-    BulkWriter,
+    AsyncIOMotorCollection,
     Document,
     PydanticObjectId,
     SortDirection,
-    WriteRules,
     init_beanie,
 )
 from ._field import get_field_definitions

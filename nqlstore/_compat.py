@@ -122,28 +122,19 @@ except ImportError:
 mongo imports; and their defaults if the 'beanie' package is not installed
 """
 try:
-    from beanie import (
-        BulkWriter,
-        Document,
-        PydanticObjectId,
-        SortDirection,
-        WriteRules,
-        init_beanie,
+    from beanie import Document, PydanticObjectId, SortDirection, init_beanie
+    from motor.motor_asyncio import (
+        AsyncIOMotorClient,
+        AsyncIOMotorClientSession,
+        AsyncIOMotorCollection,
     )
-    from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorClientSession
 except ImportError:
     from pydantic import BaseModel
 
     init_beanie = lambda *a, **k: dict(**k)
-    BulkWriter = Any
     SortDirection = Any
     AsyncIOMotorClient = lambda *a, **k: dict(**k)
     AsyncIOMotorClientSession = Any
+    AsyncIOMotorCollection = Any
     PydanticObjectId = Any
     Document = BaseModel
-
-    import enum
-
-    class WriteRules(str, enum.Enum):
-        DO_NOTHING = "DO_NOTHING"
-        WRITE = "WRITE"
