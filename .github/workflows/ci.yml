@@ -102,17 +102,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies [${{ matrix.extra }}]
+      - name: Test app '[${{ matrix.example_app }}]'
         run: |
           cd $GITHUB_WORKSPACE/examples/${{ matrix.example_app }}
           python -m pip install --upgrade pip
           python --version
           pip install -r requirements.txt
           pip install -U ../.."[all]"
-      - name: Lint with black
-        run: black --check .
-      - name: Run tests
-        run: |
+          black --check .
           pytest .
 
   release:
