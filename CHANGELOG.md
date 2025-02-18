@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.5] - 2025-02-18
+
 ### Added
 
 - Added [todos](./examples/todos) example application
