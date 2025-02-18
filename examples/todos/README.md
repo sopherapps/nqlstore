@@ -34,10 +34,6 @@ pip install -r requirements.txt
   and start its server in another terminal.
 
 - Start the application, set the URL's for the database(s) to use.  
-- _SQL_URL = f"sqlite+aiosqlite:///{_SQL_DB}"
-_REDIS_URL = "redis://localhost:6379/0"
-_MONGO_URL = "mongodb://localhost:27017"
-_MONGO_DB = "testing"
   Options are:
   - `SQL_URL` for [SQLite](https://www.sqlite.org/).
   - `MONGO_URL` (required) and `MONGO_DB` (default: "todos") for [MongoDB](https://www.mongodb.com/products/self-managed/community-edition)
