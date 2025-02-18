@@ -26,40 +26,6 @@ from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
 
-class _RedisModelMeta(_RedisModel, abc.ABC):
-    id: str | None
-    __embedded_models__: dict
-
-    @classmethod
-    def set_db(cls, db: Redis):
-        """Sets the database of this model to the given database
-
-        This just ensures that the given model can be operated on
-        by the given database.
-
-        Args:
-            db: the redis database instance
-        """
-        try:
-            cls._meta.database = db
-        except AttributeError:
-            cls.Meta.database = db
-
-        # cache the embedded models on the class
-        embedded_models = getattr(cls, "__embedded_models__", None)
-        if embedded_models is None:
-            embedded_models = [
-                model
-                for field in cls.model_fields.values()  # type: FieldInfo
-                for model in _get_embed_models(field.annotation)
-            ]
-            setattr(cls, "__embedded_models__", embedded_models)
-
-        # set db on embedded models also
-        for model in cls.__embedded_models__:
-            model.set_db(db)
-
-
 class RedisStore(BaseStore):
     """The store with data persisted in redis"""
 
@@ -67,7 +33,7 @@ class RedisStore(BaseStore):
         super().__init__(uri, parser=parser, **kwargs)
         self._db = get_redis_connection(url=uri, **kwargs)
 
-    async def register(self, models: list[type[_RedisModelMeta]], **kwargs):
+    async def register(self, models: list[type[_RedisModel]], **kwargs):
         # set the redis instances of all passed models to the current redis instance
         for model in models:
             model.set_db(self._db)
@@ -75,12 +41,12 @@ class RedisStore(BaseStore):
 
     async def insert(
         self,
-        model: type[_RedisModelMeta],
-        items: Iterable[_RedisModelMeta | dict],
+        model: type[_RedisModel],
+        items: Iterable[_RedisModel | dict],
         pipeline: Pipeline | None = None,
         pipeline_verifier: Callable[..., Any] = verify_pipeline_response,
         **kwargs,
-    ) -> list[_RedisModelMeta]:
+    ) -> list[_RedisModel]:
         model.set_db(self._db)
 
         parsed_items = [
@@ -93,7 +59,7 @@ class RedisStore(BaseStore):
 
     async def find(
         self,
-        model: type[_RedisModelMeta],
+        model: type[_RedisModel],
         *filters: Any | Expression,
         query: QuerySelector | None = None,
         skip: int = 0,
@@ -101,7 +67,7 @@ class RedisStore(BaseStore):
         sort: tuple[str] | None = None,
         knn: KNNExpression | None = None,
         **kwargs,
-    ) -> list[_RedisModelMeta]:
+    ) -> list[_RedisModel]:
         model.set_db(self._db)
 
         nql_filters = ()
@@ -119,13 +85,13 @@ class RedisStore(BaseStore):
 
     async def update(
         self,
-        model: type[_RedisModelMeta],
+        model: type[_RedisModel],
         *filters: Any | Expression,
         query: QuerySelector | None = None,
         updates: dict | None = None,
         knn: KNNExpression | None = None,
         **kwargs,
-    ) -> list[_RedisModelMeta]:
+    ) -> list[_RedisModel]:
         model.set_db(self._db)
 
         if updates is None:
@@ -146,13 +112,13 @@ class RedisStore(BaseStore):
 
     async def delete(
         self,
-        model: type[_RedisModelMeta],
+        model: type[_RedisModel],
         *filters: Any | Expression,
         query: QuerySelector | None = None,
         knn: KNNExpression | None = None,
         pipeline: Pipeline | None = None,
         **kwargs,
-    ) -> list[_RedisModelMeta]:
+    ) -> list[_RedisModel]:
         model.set_db(self._db)
 
         nql_filters = ()
@@ -165,10 +131,25 @@ class RedisStore(BaseStore):
         return matched_items
 
 
-class _HashModelMeta(_HashModel, _RedisModelMeta, abc.ABC):
+class _HashModelMeta(_HashModel, abc.ABC):
     """Base model for all HashModels. Helpful with typing"""
 
-    ...
+    id: str | None
+
+    @classmethod
+    def set_db(cls, db: Redis):
+        """Sets the database of this model to the given database
+
+        This just ensures that the given model can be operated on
+        by the given database.
+
+        Args:
+            db: the redis database instance
+        """
+        try:
+            cls._meta.database = db
+        except AttributeError:
+            cls.Meta.database = db
 
 
 def HashModel(
@@ -200,10 +181,40 @@ def HashModel(
     )
 
 
-class _JsonModelMeta(_JsonModel, _RedisModelMeta, abc.ABC):
+class _JsonModelMeta(_JsonModel, abc.ABC):
     """Base model for all JsonModels. Helpful with typing"""
 
-    ...
+    id: str | None
+    __embedded_models__: dict
+
+    @classmethod
+    def set_db(cls, db: Redis):
+        """Sets the database of this model to the given database
+
+        This just ensures that the given model can be operated on
+        by the given database.
+
+        Args:
+            db: the redis database instance
+        """
+        try:
+            cls._meta.database = db
+        except AttributeError:
+            cls.Meta.database = db
+
+        # cache the embedded models on the class
+        embedded_models = getattr(cls, "__embedded_models__", None)
+        if embedded_models is None:
+            embedded_models = [
+                model
+                for field in cls.model_fields.values()  # type: FieldInfo
+                for model in _get_embed_models(field.annotation)
+            ]
+            setattr(cls, "__embedded_models__", embedded_models)
+
+        # set db on embedded models also
+        for model in cls.__embedded_models__:
+            model.set_db(db)
 
 
 def JsonModel(
@@ -244,10 +255,25 @@ def JsonModel(
     )
 
 
-class _EmbeddedJsonModelMeta(_EmbeddedJsonModel, _RedisModelMeta, abc.ABC):
+class _EmbeddedJsonModelMeta(_EmbeddedJsonModel, abc.ABC):
     """Base model for all EmbeddedJsonModels. Helpful with typing"""
 
-    ...
+    id: str | None
+
+    @classmethod
+    def set_db(cls, db: Redis):
+        """Sets the database of this model to the given database
+
+        This just ensures that the given model can be operated on
+        by the given database.
+
+        Args:
+            db: the redis database instance
+        """
+        try:
+            cls._meta.database = db
+        except AttributeError:
+            cls.Meta.database = db
 
 
 def EmbeddedJsonModel(
@@ -291,7 +317,7 @@ def _from_pk(data: dict) -> str | None:
     return data.get("pk", None)
 
 
-def _get_embed_models(annot: Type) -> list[Type[_RedisModelMeta]]:
+def _get_embed_models(annot: Type) -> list[Type[_RedisModel]]:
     """Gets the embedded models in the annotation which might be a generic like list[Model]
 
     Args:
@@ -301,7 +327,7 @@ def _get_embed_models(annot: Type) -> list[Type[_RedisModelMeta]]:
         the embedded model in the annotation
     """
     try:
-        if issubclass(annot, _RedisModelMeta):
+        if issubclass(annot, _RedisModel):
             return [annot]
     except TypeError:
         return [item for arg in get_args(annot) for item in _get_embed_models(arg)]
