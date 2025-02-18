@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from beanie import PydanticObjectId
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from models import (
     MongoTodo,
     MongoTodoList,
@@ -14,64 +14,20 @@ from models import (
     SqlTodoList,
 )
 from schemas import TodoList
+from stores import clear_stores, get_mongo_store, get_redis_store, get_sql_store
 
 from nqlstore import MongoStore, RedisStore, SQLStore
-
-
-# dependencies
-def get_redis_store(req: Request) -> RedisStore | None:
-    """Dependency injector for the redis store"""
-    try:
-        return req.app.state.redis
-    except (KeyError, AttributeError):
-        return None
-
-
-def get_sql_store(req: Request) -> SQLStore | None:
-    """Dependency injector for the sql store"""
-    try:
-        return req.app.state.sql
-    except (KeyError, AttributeError):
-        return None
-
-
-def get_mongo_store(req: Request) -> MongoStore | None:
-    """Dependency injector for the mongo store"""
-    try:
-        return req.app.state.mongo
-    except (KeyError, AttributeError):
-        return None
-
 
 _SqlStoreDep = Annotated[SQLStore | None, Depends(get_sql_store)]
 _RedisStoreDep = Annotated[RedisStore | None, Depends(get_redis_store)]
 _MongoStoreDep = Annotated[MongoStore | None, Depends(get_mongo_store)]
 
 
-# startup events
 @asynccontextmanager
 async def lifespan(app_: FastAPI):
-    sql_url = os.environ.get("SQL_URL", "")
-    redis_url = os.environ.get("REDIS_URL", "")
-    mongo_url = os.environ.get("MONGO_URL", "")
-    mongo_db = os.environ.get("MONGO_DB", "todos")
-
-    if sql_url:
-        sql_store = SQLStore(uri=sql_url)
-        await sql_store.register([SqlTodoList, SqlTodo])
-        app_.state.sql = sql_store
-
-    if redis_url:
-        redis_store = RedisStore(uri=redis_url)
-        await redis_store.register([RedisTodoList, RedisTodo])
-        app_.state.redis = redis_store
-
-    if mongo_url:
-        mongo_store = MongoStore(uri=mongo_url, database=mongo_db)
-        await mongo_store.register([MongoTodoList, MongoTodo])
-        app_.state.mongo = mongo_store
-
+    clear_stores()
     yield
+    clear_stores()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -87,14 +43,15 @@ async def search(
     """Searches for todos by name"""
 
     results = []
-    query = {"name": {"$in": q}}
+    query = {"name": {"$regex": f".*{q}.*", "$options": "i"}}
 
     try:
         if sql:
             results += await sql.find(SqlTodoList, query=query)
 
         if redis:
-            results += await redis.find(RedisTodoList, query=query)
+            # redis's regex search is not mature so we use its full text search
+            results += await redis.find(RedisTodoList, RedisTodoList.name % q)
 
         if mongo:
             results += await mongo.find(MongoTodoList, query=query)
@@ -102,7 +59,7 @@ async def search(
         logging.error(exp)
         raise exp
 
-    return results
+    return [item.model_dump(mode="json") for item in results]
 
 
 @app.get("/todos/{id_}")
@@ -124,13 +81,15 @@ async def get_one(
             results += await redis.find(RedisTodoList, query=query, limit=1)
 
         if mongo:
-            results += await mongo.find(MongoTodoList, query=query, limit=1)
+            results += await mongo.find(
+                MongoTodoList, query={"_id": {"$eq": PydanticObjectId(id_)}}, limit=1
+            )
     except Exception as exp:
         logging.error(exp)
         raise exp
 
     try:
-        return results[0]
+        return results[0].model_dump(mode="json")
     except IndexError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
