@@ -2,7 +2,6 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from beanie import PydanticObjectId
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from models import MongoTodoList, RedisTodoList, SqlTodoList
 from schemas import TodoList
@@ -73,9 +72,7 @@ async def get_one(
             results += await redis.find(RedisTodoList, query=query, limit=1)
 
         if mongo:
-            results += await mongo.find(
-                MongoTodoList, query={"_id": {"$eq": PydanticObjectId(id_)}}, limit=1
-            )
+            results += await mongo.find(MongoTodoList, query=query, limit=1)
     except Exception as exp:
         logging.error(exp)
         raise exp
@@ -135,11 +132,7 @@ async def update_one(
             results += await redis.update(RedisTodoList, query=query, updates=updates)
 
         if mongo:
-            results += await mongo.update(
-                MongoTodoList,
-                query={"_id": {"$eq": PydanticObjectId(id_)}},
-                updates=updates,
-            )
+            results += await mongo.update(MongoTodoList, query=query, updates=updates)
     except Exception as exp:
         logging.error(exp)
         raise exp
@@ -169,9 +162,7 @@ async def delete_one(
             results += await redis.delete(RedisTodoList, query=query)
 
         if mongo:
-            results += await mongo.delete(
-                MongoTodoList, query={"_id": {"$eq": PydanticObjectId(id_)}}
-            )
+            results += await mongo.delete(MongoTodoList, query=query)
     except Exception as exp:
         logging.error(exp)
         raise exp
