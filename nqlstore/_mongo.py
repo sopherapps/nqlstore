@@ -19,6 +19,7 @@ from ._compat import (
     init_beanie,
 )
 from ._field import get_field_definitions
+from .query.parsers import QueryParser
 
 _T = TypeVar("_T", bound=Document)
 _Filter = Mapping[str, Any] | bool
@@ -28,14 +29,17 @@ _UPDATE_OP_REGEX = re.compile(r"\$\w*")
 class MongoStore(BaseStore):
     """The store that persists its data in mongo db"""
 
-    def __init__(self, uri: str, database: str, **kwargs):
+    def __init__(
+        self, uri: str, database: str, parser: QueryParser | None = None, **kwargs
+    ):
         """
         Args:
             uri: the URI of the mongodb server to connect to
             database: the name of the database
+            parser: the QueryParser to use on store. Defaults to None
             kwargs: extra key-word args to pass to AsyncIOMotorClient
         """
-        super().__init__(uri, **kwargs)
+        super().__init__(uri, parser=parser, **kwargs)
         self._client = AsyncIOMotorClient(uri, **kwargs)
         self._db = self._client[database]
         self._db_name = database
@@ -108,6 +112,7 @@ class MongoStore(BaseStore):
         if query is None:
             query = {}
 
+        query = self._parser.to_mongo(query)
         collection = self._get_collection(model)
 
         raw_results = await collection.find(
@@ -136,6 +141,7 @@ class MongoStore(BaseStore):
         if query is None:
             query = {}
 
+        query = self._parser.to_mongo(query)
         mongo_updates = _to_mongo_updates(updates)
 
         collection = self._get_collection(model)
@@ -166,6 +172,7 @@ class MongoStore(BaseStore):
         if query is None:
             query = {}
 
+        query = self._parser.to_mongo(query)
         collection = self._get_collection(model)
         query_cursor = collection.find(query, session=session, **pymongo_kwargs)
         deleted_items = [model.model_validate(v) async for v in query_cursor]

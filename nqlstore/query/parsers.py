@@ -3,10 +3,11 @@
 import logging
 from abc import ABC, abstractmethod
 from functools import reduce
-from typing import Any, Iterable, TypeVar, Union
+from typing import Any, Iterable, Mapping, TypeVar, Union
 
 from .._compat import Expression as _RedisExpression
 from .._compat import (
+    PydanticObjectId,
     _ColumnExpressionArgument,
     _RedisField,
     _RedisModel,
@@ -15,6 +16,7 @@ from .._compat import (
 )
 from .selectors import OperatorSelector, QuerySelector
 
+_MongoFilter = Mapping[str, Any]
 _SQLFilter = _ColumnExpressionArgument[bool] | bool
 _RedisFilter = Any | _RedisExpression
 _T = TypeVar("_T")
@@ -644,6 +646,32 @@ class QueryParser(dict):
 
         super().__init__()
 
+    def to_mongo(self, query: QuerySelector) -> _MongoFilter:
+        """Converts the mongodb NQL query to mongo query
+
+        It cleans up a few NQL-specific query things like
+        "id" for "_id", and strings for ObjectId in "id" field
+        etc.
+
+        Args:
+            query: the mongodb-like query
+
+        Returns:
+            the mongo filters to pass to the mongo finder function
+        """
+        parsed_query = {}
+        for k, v in query.items():
+            key = k
+            value = v
+
+            if k == "id":
+                key = "_id"
+                value = _to_objectid(v)
+
+            parsed_query[key] = value
+
+        return parsed_query
+
     def to_redis(
         self, model: type[_RedisModel], query: QuerySelector
     ) -> tuple[_SQLFilter, ...]:
@@ -820,3 +848,24 @@ def _get_redis_nested_field(model: type[_RedisModel], path: str) -> _RedisField:
         raise ValueError(f"no field '{path}' found on '{model}'")
 
     return field
+
+
+def _to_objectid(value: str | list | tuple | dict | PydanticObjectId) -> Any:
+    """Converts the value to a value of similar shape with all string values as ObjectId
+
+    Args:
+        value: the value to convert
+
+    Returns:
+        the value with same shape as before but with strings replaced by ObjectID equivalents
+    """
+    try:
+        return PydanticObjectId(value)
+    except TypeError:
+        if isinstance(value, tuple):
+            return tuple([_to_objectid(v) for v in value])
+        if isinstance(value, list):
+            return [_to_objectid(v) for v in value]
+        if isinstance(value, dict):
+            return {k: _to_objectid(v) for k, v in value.items()}
+        return value

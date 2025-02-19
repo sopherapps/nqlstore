@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Automatically convert 'id' references in mongo queries to '_id' ObjectId equivalents
+
 ## [0.1.5] - 2025-02-18
 
 ### Added
