@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - Automatically convert 'id' references in mongo queries to '_id' ObjectId equivalents
 
+### Fixed
+
+- Fixed 'AttributeError: 'FieldInfo' object has no attribute 'disable_on_mongo' when field is declared without `Field()` function
+
 ## [0.1.5] - 2025-02-18
 
 ### Added

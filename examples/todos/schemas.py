@@ -9,6 +9,7 @@ class TodoList(BaseModel):
     """A list of Todos"""
 
     name: str = Field(index=True, full_text_search=True)
+    description: str | None = None
     todos: list["Todo"] = Relationship(back_populates="parent", default=[])
 
 
