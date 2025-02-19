@@ -29,6 +29,7 @@ async def test_create_sql_todolist(
         expected = {
             "id": todolist_id,
             "name": todolist["name"],
+            "description": None,
             "todos": [
                 {
                     **raw,
@@ -66,6 +67,7 @@ async def test_create_redis_todolist(
         expected = {
             "id": todolist_id,
             "name": todolist["name"],
+            "description": None,
             "pk": todolist_id,
             "todos": [
                 {
@@ -103,6 +105,7 @@ async def test_create_mongo_todolist(
         expected = {
             "id": todolist_id,
             "name": todolist["name"],
+            "description": None,
             "todos": [
                 {
                     **raw,

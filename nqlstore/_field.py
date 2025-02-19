@@ -420,13 +420,13 @@ def get_field_definitions(
     fields = {}
     for field_name, field in schema.model_fields.items():  # type: str, FieldInfo
         class_field_definition = _get_class_field_definition(field)
-        if is_for_redis and class_field_definition.disable_on_redis:
+        if is_for_redis and getattr(class_field_definition, "disable_on_redis", False):
             continue
 
-        if is_for_mongo and class_field_definition.disable_on_mongo:
+        if is_for_mongo and getattr(class_field_definition, "disable_on_mongo", False):
             continue
 
-        if is_for_sql and class_field_definition.disable_on_sql:
+        if is_for_sql and getattr(class_field_definition, "disable_on_sql", False):
             continue
 
         field_type = field.annotation
