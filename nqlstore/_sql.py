@@ -320,6 +320,8 @@ def SQLModel(
     schema: type[ModelT],
     /,
     relationships: dict[str, type[Any] | type[Union[Any]]] = None,
+    table: bool = True,
+    **kwargs: Any,
 ) -> type[_SQLModelMeta] | type[ModelT]:
     """Creates a new SQLModel for the given schema for redis
 
@@ -331,6 +333,9 @@ def SQLModel(
         name: the name of the model
         schema: the schema from which the model is to be made
         relationships: a map of <name>:annotation for all relationships
+        table: whether this model should have a table in the database or not;
+            default = True
+        kwargs: key-word args to pass to the SQLModel when defining it
 
     Returns:
         a SQLModel model class with the given name
@@ -342,7 +347,7 @@ def SQLModel(
         # module of the calling function
         __module__=sys._getframe(1).f_globals["__name__"],
         __doc__=schema.__doc__,
-        __cls_kwargs__={"table": True},
+        __cls_kwargs__={"table": table, **kwargs},
         __base__=(_SQLModelMeta,),
         **fields,
     )
