@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Allowed `EmbeddedJsonModel`'s to also contain `EmbeddedJsonModel` if there is need.
+- Allowed extra key-word args to be passed to the `SQLModel()`
+
+### Added
+
+- Added the [examples/blog](./examples/blog) example
+
 ## [0.1.6] - 2025-02-19
 
 ### Changed
