@@ -1,6 +1,6 @@
 """Schemas for the application"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel
 
@@ -16,7 +16,7 @@ class Author(BaseModel):
 class InternalAuthor(Author):
     """The author as saved in database"""
 
-    password: str
+    password: str = Field()
     email: str = Field(index=True)
 
 
@@ -24,7 +24,7 @@ class Post(BaseModel):
     """The post"""
 
     title: str = Field(index=True, full_text_search=True)
-    content: str | None
+    content: str | None = Field()
     author_id: int | None = Field(
         default=None,
         foreign_key="sqlauthor.id",
@@ -32,8 +32,15 @@ class Post(BaseModel):
         disable_on_redis=True,
     )
     author: Author | None = Relationship(default=None)
-    comments: list["Comment"] = Relationship(default=[])
-    tags: list["Tag"] = Relationship(default=[], link_model="TagLink")
+    comments: list["Comment"] = Relationship(
+        default=[],
+        disable_on_redis=True,
+    )
+    tags: list["Tag"] = Relationship(
+        default=[],
+        link_model="TagLink",
+        disable_on_redis=True,
+    )
     created_at: datetime = Field(index=True, default_factory=datetime.now)
     updated_at: datetime = Field(index=True, default_factory=datetime.now)
 
@@ -47,7 +54,7 @@ class Comment(BaseModel):
         disable_on_mongo=True,
         disable_on_redis=True,
     )
-    content: str | None
+    content: str | None = Field()
     author_id: int | None = Field(
         default=None,
         foreign_key="sqlauthor.id",

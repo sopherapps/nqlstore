@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 
 - Added the [examples/blog](./examples/blog) example
+- Add the `link_model` parameter to the `SQLModel()` function to add link models used as through tables
 
 ## [0.1.6] - 2025-02-19
 

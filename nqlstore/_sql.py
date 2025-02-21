@@ -320,6 +320,7 @@ def SQLModel(
     schema: type[ModelT],
     /,
     relationships: dict[str, type[Any] | type[Union[Any]]] = None,
+    link_models: dict[str, type[Any]] = None,
     table: bool = True,
     **kwargs: Any,
 ) -> type[_SQLModelMeta] | type[ModelT]:
@@ -333,6 +334,8 @@ def SQLModel(
         name: the name of the model
         schema: the schema from which the model is to be made
         relationships: a map of <name>:annotation for all relationships
+        link_models: a map of <field name>:Model class for all link (through)
+            tables in many-to-many relationships
         table: whether this model should have a table in the database or not;
             default = True
         kwargs: key-word args to pass to the SQLModel when defining it
@@ -340,7 +343,7 @@ def SQLModel(
     Returns:
         a SQLModel model class with the given name
     """
-    fields = get_field_definitions(schema, relationships=relationships, is_for_sql=True)
+    fields = get_field_definitions(schema, relationships=relationships, link_models=link_models, is_for_sql=True)
 
     return create_model(
         name,

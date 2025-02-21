@@ -59,4 +59,5 @@ SqlPost = SQLModel(
         "comments": list[SqlComment],
         "tags": list[SqlTag],
     },
+    link_models={"tags": SqlTagLink},
 )

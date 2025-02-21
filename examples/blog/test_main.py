@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 from bson import ObjectId
-from conftest import COMMENT_LIST, POST_LISTS
+from conftest import ACCESS_TOKEN, COMMENT_LIST, POST_LISTS
 from fastapi.testclient import TestClient
 from main import MongoPost, RedisPost, SqlPost
 
@@ -58,7 +58,9 @@ async def test_create_redis_post(
 ):
     """POST to /posts creates a post in redis and returns it"""
     with client_with_redis as client:
-        response = client.post("/posts", json=post)
+        response = client.post(
+            "/posts", json=post, headers={"Authorization": f"Bearer {ACCESS_TOKEN}"}
+        )
 
         got = response.json()
         post_id = got["id"]

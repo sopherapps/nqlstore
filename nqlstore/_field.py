@@ -394,6 +394,7 @@ def get_field_definitions(
     schema: type[ModelT],
     embedded_models: dict[str, Type] | None = None,
     relationships: dict[str, Type] | None = None,
+    link_models: dict[str, Type] | None = None,
     is_for_redis: bool = False,
     is_for_mongo: bool = False,
     is_for_sql: bool = False,
@@ -404,6 +405,8 @@ def get_field_definitions(
         schema: the model schema class
         embedded_models: the map of embedded models as <field_name>: <type annotation>
         relationships: the map of relationships as <field_name>: <type annotation>
+        link_models: a map of <field name>:Model class for all link (through)
+            tables in many-to-many relationships
         is_for_redis: whether the definitions are for redis or not
         is_for_mongo: whether the definitions are for mongo or not
         is_for_sql: whether the definitions are for sql or not
@@ -416,6 +419,9 @@ def get_field_definitions(
 
     if relationships is None:
         relationships = {}
+
+    if link_models is None:
+        link_models = {}
 
     fields = {}
     for field_name, field in schema.model_fields.items():  # type: str, FieldInfo
@@ -441,6 +447,7 @@ def get_field_definitions(
             field_type = relationships[field_name]
             # redefine the class so that SQLModel can redo its thing
             field_info = class_field_definition
+            field_info.link_model = link_models.get(field_name)
 
         fields[field_name] = (field_type, field_info)
     return fields

@@ -72,14 +72,14 @@ _SQL_URL = f"sqlite+aiosqlite:///{_SQL_DB}"
 _REDIS_URL = "redis://localhost:6379/0"
 _MONGO_URL = "mongodb://localhost:27017"
 _MONGO_DB = "testing"
-_ACCESS_TOKEN = "some-token"
+ACCESS_TOKEN = "some-token"
 
 
 @pytest.fixture
 def mocked_auth(mocker: pytest_mock.MockerFixture):
     """Mocks the auth to always return the AUTHOR as valid"""
-    mocker.patch("jwt.encode", return_value=_ACCESS_TOKEN)
-    mocker.patch("jwt.decode", return_value={"email": AUTHOR["email"]})
+    mocker.patch("jwt.encode", return_value=ACCESS_TOKEN)
+    mocker.patch("jwt.decode", return_value={"sub": AUTHOR["email"]})
     mocker.patch("auth.pwd_context.verify", return_value=True)
     yield
 
@@ -137,6 +137,8 @@ async def sql_store(mocked_auth):
             SqlInternalAuthor,
         ]
     )
+    # insert default user
+    await store.insert(SqlInternalAuthor, [AUTHOR])
     yield store
 
     # clean up
@@ -148,8 +150,8 @@ async def mongo_store(mocked_auth):
     """The mongodb store. Requires a running instance of mongodb"""
     import pymongo
 
-    mongo_store = MongoStore(uri=_MONGO_URL, database=_MONGO_DB)
-    await mongo_store.register(
+    store = MongoStore(uri=_MONGO_URL, database=_MONGO_DB)
+    await store.register(
         [
             MongoAuthor,
             MongoTag,
@@ -159,7 +161,10 @@ async def mongo_store(mocked_auth):
         ]
     )
 
-    yield mongo_store
+    # insert default user
+    await store.insert(MongoInternalAuthor, [AUTHOR])
+
+    yield store
 
     # clean up
     client = pymongo.MongoClient(_MONGO_URL)  # type: ignore
@@ -181,6 +186,8 @@ async def redis_store(mocked_auth):
             RedisInternalAuthor,
         ]
     )
+    # insert default user
+    await store.insert(RedisInternalAuthor, [AUTHOR])
 
     yield store
 
