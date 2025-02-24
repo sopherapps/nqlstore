@@ -426,13 +426,18 @@ def get_field_definitions(
     fields = {}
     for field_name, field in schema.model_fields.items():  # type: str, FieldInfo
         class_field_definition = _get_class_field_definition(field)
-        if is_for_redis and getattr(class_field_definition, "disable_on_redis", False):
+        if not isinstance(class_field_definition, (FieldInfo, RelationshipInfo)):
+            raise TypeError(
+                f"field '{schema.__name__}.{field_name}' was not initialized with a {Field.__name__}() or {Relationship.__name__}()"
+            )
+
+        if is_for_redis and class_field_definition.disable_on_redis:
             continue
 
-        if is_for_mongo and getattr(class_field_definition, "disable_on_mongo", False):
+        if is_for_mongo and class_field_definition.disable_on_mongo:
             continue
 
-        if is_for_sql and getattr(class_field_definition, "disable_on_sql", False):
+        if is_for_sql and class_field_definition.disable_on_sql:
             continue
 
         field_type = field.annotation

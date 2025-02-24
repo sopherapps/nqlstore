@@ -1,8 +1,9 @@
 """Schemas for the application"""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from pydantic import BaseModel
+from utils import current_timestamp
 
 from nqlstore import Field, Relationship
 
@@ -24,10 +25,10 @@ class Post(BaseModel):
     """The post"""
 
     title: str = Field(index=True, full_text_search=True)
-    content: str | None = Field()
+    content: str | None = Field(default="")
     author_id: int | None = Field(
         default=None,
-        foreign_key="sqlauthor.id",
+        foreign_key="sqlinternalauthor.id",
         disable_on_mongo=True,
         disable_on_redis=True,
     )
@@ -41,8 +42,8 @@ class Post(BaseModel):
         link_model="TagLink",
         disable_on_redis=True,
     )
-    created_at: datetime = Field(index=True, default_factory=datetime.now)
-    updated_at: datetime = Field(index=True, default_factory=datetime.now)
+    created_at: str = Field(index=True, default_factory=current_timestamp)
+    updated_at: str = Field(index=True, default_factory=current_timestamp)
 
 
 class Comment(BaseModel):
@@ -54,16 +55,16 @@ class Comment(BaseModel):
         disable_on_mongo=True,
         disable_on_redis=True,
     )
-    content: str | None = Field()
+    content: str | None = Field(default="")
     author_id: int | None = Field(
         default=None,
-        foreign_key="sqlauthor.id",
+        foreign_key="sqlinternalauthor.id",
         disable_on_mongo=True,
         disable_on_redis=True,
     )
     author: Author | None = Relationship(default=None)
-    created_at: datetime = Field(index=True, default_factory=datetime.now)
-    updated_at: datetime = Field(index=True, default_factory=datetime.now)
+    created_at: str = Field(index=True, default_factory=current_timestamp)
+    updated_at: str = Field(index=True, default_factory=current_timestamp)
 
 
 class TagLink(BaseModel):

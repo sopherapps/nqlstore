@@ -47,15 +47,17 @@ RedisPost = JsonModel(
 
 # sqlite models
 SqlInternalAuthor = SQLModel("SqlInternalAuthor", InternalAuthor)
-SqlAuthor = SQLModel("SqlAuthor", Author, table=False)
-SqlComment = SQLModel("SqlComment", Comment, relationships={"author": SqlAuthor | None})
+# SqlAuthor = SQLModel("SqlAuthor", Author, table=False)
+SqlComment = SQLModel(
+    "SqlComment", Comment, relationships={"author": SqlInternalAuthor | None}
+)
 SqlTagLink = SQLModel("SqlTagLink", TagLink)
 SqlTag = SQLModel("SqlTag", Tag)
 SqlPost = SQLModel(
     "SqlPost",
     Post,
     relationships={
-        "author": SqlAuthor | None,
+        "author": SqlInternalAuthor | None,
         "comments": list[SqlComment],
         "tags": list[SqlTag],
     },

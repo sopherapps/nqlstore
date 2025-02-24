@@ -14,6 +14,7 @@ from ._compat import (
     DetachedInstanceError,
     IncEx,
     InstrumentedAttribute,
+    RelationshipDirection,
     RelationshipProperty,
     Table,
     _ColumnExpressionArgument,
@@ -22,7 +23,9 @@ from ._compat import (
     create_async_engine,
     delete,
     insert,
+    pg_insert,
     select,
+    sqlite_insert,
     subqueryload,
     update,
 )
@@ -42,7 +45,7 @@ class SQLStore(BaseStore):
         self._engine = create_async_engine(uri, **kwargs)
 
     async def register(self, models: list[type[_T]], checkfirst: bool = True):
-        tables = [v.__table__ for v in models]
+        tables = [v.__table__ for v in models if hasattr(v, "__table__")]
         async with self._engine.begin() as conn:
             await conn.run_sync(
                 _SQLModel.metadata.create_all, tables=tables, checkfirst=checkfirst
@@ -57,7 +60,8 @@ class SQLStore(BaseStore):
         relations_mapper = _get_relations_mapper(model)
 
         async with AsyncSession(self._engine) as session:
-            stmt = insert(model).returning(model)
+            insert_func = await _get_insert(session)
+            stmt = insert_func(model).returning(model)
             cursor = await session.stream_scalars(stmt, parsed_items)
             results = await cursor.all()
             result_ids = [v.id for v in results]
@@ -72,17 +76,44 @@ class SQLStore(BaseStore):
                 for idx, record in enumerate(items):
                     parent = results[idx]
                     raw_value = _get_key_or_prop(record, k)
-                    embedded_value = _parse_embedded(raw_value, field, parent)
-                    if isinstance(embedded_value, Iterable):
-                        embedded_values += embedded_value
-                    elif isinstance(embedded_value, _SQLModel):
+                    parent_partial, embedded_value = _parse_embedded(
+                        raw_value, field, parent
+                    )
+                    if isinstance(embedded_value, _SQLModel):
                         embedded_values.append(embedded_value)
+                    elif isinstance(embedded_value, Iterable):
+                        embedded_values += embedded_value
+
+                    # for many-to-one relationships, the parent
+                    # also needs to be updated.
+                    # add the partial update of the parent
+                    for key, val in parent_partial.items():
+                        setattr(parent, key, val)
 
                 # insert the related items
                 if len(embedded_values) > 0:
                     field_model = field.property.mapper.class_
-                    embed_stmt = insert(field_model).returning(field_model)
+
+                    try:
+                        # PostgreSQL and SQLite support on_conflict_do_nothing
+                        embed_stmt = (
+                            insert_func(field_model)
+                            .on_conflict_do_nothing()
+                            .returning(field_model)
+                        )
+                    except AttributeError:
+                        # MySQL supports prefix("IGNORE")
+                        # Other databases might fail at this point
+                        embed_stmt = (
+                            insert_func(field_model)
+                            .prefix_with("IGNORE", dialect="mysql")
+                            .returning(field_model)
+                        )
+
                     await session.stream_scalars(embed_stmt, embedded_values)
+
+            # update the updated parents
+            session.add_all(results)
 
             await session.commit()
             refreshed_results = await self.find(model, model.id.in_(result_ids))
@@ -178,6 +209,7 @@ class SQLStore(BaseStore):
             raw_results = await cursor.fetchall()
             results = [model.model_validate(row._mapping) for row in raw_results]
             result_ids = [v.id for v in results]
+            # insert_func = await _get_insert(session)
 
             for k, v in embedded_updates.items():
                 field = relations_mapper[k]
@@ -196,7 +228,7 @@ class SQLStore(BaseStore):
                 embedded_values = []
                 fk_values = []
                 for parent in results:
-                    embedded_value = _parse_embedded(v, field, parent)
+                    parent_partial, embedded_value = _parse_embedded(v, field, parent)
                     if isinstance(embedded_value, Iterable):
                         embedded_values += embedded_value
                         fk_values.append(getattr(parent, parent_id_field))
@@ -343,7 +375,9 @@ def SQLModel(
     Returns:
         a SQLModel model class with the given name
     """
-    fields = get_field_definitions(schema, relationships=relationships, link_models=link_models, is_for_sql=True)
+    fields = get_field_definitions(
+        schema, relationships=relationships, link_models=link_models, is_for_sql=True
+    )
 
     return create_model(
         name,
@@ -524,7 +558,7 @@ def _with_value(obj: dict | Any, field: str, value: Any) -> Any:
 
 def _parse_embedded(
     value: Iterable[dict | Any] | dict | Any, field: Any, parent: _SQLModel
-) -> Iterable[_SQLModel] | _SQLModel | None:
+) -> tuple[dict, Iterable[_SQLModel] | _SQLModel | None]:
     """Parses embedded items that can be a single item or many into SQLModels
 
     Args:
@@ -533,11 +567,12 @@ def _parse_embedded(
         parent: the parent SQLModel to which this value is attached
 
     Returns:
-        An iterable of SQLModel instances or a single SQLModel instance
-        or None if value is None
+        tuple (parent_partial, embedded_models): where parent_partial is the partial update of the parent
+            and embedded_models is an iterable of SQLModel instances or a single SQLModel instance
+            or None if value is None
     """
     if value is None:
-        return None
+        return {}, None
 
     props = field.property  # type: RelationshipProperty[Any]
     wrapper_type = props.collection_class
@@ -545,22 +580,24 @@ def _parse_embedded(
     fk_field = props.primaryjoin.right.name
     parent_id_field = props.primaryjoin.left.name
     fk_value = getattr(parent, parent_id_field)
+    direction = props.direction
 
-    if issubclass(wrapper_type, (list, tuple, set)):
+    if direction == RelationshipDirection.MANYTOONE:
+        # # add a foreign key value to link back to parent
+        return {fk_field: fk_value}, field_model.model_validate(value)
+
+    if direction in (RelationshipDirection.ONETOMANY, RelationshipDirection.MANYTOMANY):
         # add a foreign key values to link back to parent
-        return wrapper_type(
-            [
-                field_model.model_validate(_with_value(v, fk_field, fk_value))
-                for v in value
-            ]
-        )
-    elif wrapper_type is None:
-        # add a foreign key value to link back to parent
-        linked_value = _with_value(value, fk_field, fk_value)
-        return field_model.model_validate(linked_value)
+        if issubclass(wrapper_type, (list, tuple, set)):
+            return {}, wrapper_type(
+                [
+                    field_model.model_validate(_with_value(v, fk_field, fk_value))
+                    for v in value
+                ]
+            )
 
     raise NotImplementedError(
-        f"relationship of type annotation {wrapper_type} not supported yet"
+        f"relationship {direction} of type annotation {wrapper_type} not supported yet"
     )
 
 
@@ -584,12 +621,33 @@ def _serialize_embedded(
     props = field.property  # type: RelationshipProperty[Any]
     wrapper_type = props.collection_class
 
-    if issubclass(wrapper_type, (list, tuple, set)):
+    if wrapper_type is None:
+        return value.model_dump(**kwargs)
+    elif issubclass(wrapper_type, (list, tuple, set)):
         # add a foreign key values to link back to parent
         return wrapper_type([v.model_dump(**kwargs) for v in value])
-    elif wrapper_type is None:
-        return value.model_dump(**kwargs)
 
     raise NotImplementedError(
         f"relationship of type annotation {wrapper_type} not supported yet"
     )
+
+
+async def _get_insert(session: AsyncSession):
+    """Gets the insert statement for the given session
+
+    Args:
+        session: the async session connecting to the database
+
+    Returns:
+        the insert function
+    """
+    conn = await session.connection()
+    dialect = conn.dialect
+    dialect_name = dialect.name
+
+    if dialect_name == "sqlite":
+        return sqlite_insert
+    if dialect_name == "postgresql":
+        return pg_insert
+
+    return insert

@@ -7,7 +7,7 @@ import pytest
 import pytest_asyncio
 import pytest_mock
 from fastapi.testclient import TestClient
-from models import (
+from models import (  # SqlAuthor,
     MongoAuthor,
     MongoComment,
     MongoInternalAuthor,
@@ -18,7 +18,6 @@ from models import (
     RedisInternalAuthor,
     RedisPost,
     RedisTag,
-    SqlAuthor,
     SqlComment,
     SqlInternalAuthor,
     SqlPost,
@@ -129,7 +128,7 @@ async def sql_store(mocked_auth):
 
     await store.register(
         [
-            SqlAuthor,
+            # SqlAuthor,
             SqlTag,
             SqlTagLink,
             SqlPost,

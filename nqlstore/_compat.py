@@ -42,8 +42,15 @@ sql imports; and their default if sqlmodel is missing
 """
 try:
     from sqlalchemy import Column, Table
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
     from sqlalchemy.ext.asyncio import create_async_engine
-    from sqlalchemy.orm import InstrumentedAttribute, RelationshipProperty, subqueryload
+    from sqlalchemy.orm import (
+        InstrumentedAttribute,
+        RelationshipDirection,
+        RelationshipProperty,
+        subqueryload,
+    )
     from sqlalchemy.orm.exc import DetachedInstanceError
     from sqlalchemy.sql._typing import (
         _ColumnExpressionArgument,
@@ -75,9 +82,9 @@ except ImportError:
     OnDeleteType = Literal["CASCADE", "SET NULL", "RESTRICT"]
     Column = Any
     create_async_engine = lambda *a, **k: dict(**k)
-    delete = insert = select = update = create_async_engine
+    pg_insert = sqlite_insert = delete = insert = select = update = create_async_engine
     AsyncSession = Any
-    RelationshipProperty = Set
+    RelationshipDirection = RelationshipProperty = Set
     Table = Set
     InstrumentedAttribute = Set
     subqueryload = lambda *a, **kwargs: dict(**kwargs)

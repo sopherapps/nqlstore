@@ -4,7 +4,7 @@ import os
 from typing import Annotated
 
 from fastapi import Depends
-from models import (
+from models import (  # SqlAuthor,
     MongoAuthor,
     MongoComment,
     MongoInternalAuthor,
@@ -15,7 +15,6 @@ from models import (
     RedisInternalAuthor,
     RedisPost,
     RedisTag,
-    SqlAuthor,
     SqlComment,
     SqlInternalAuthor,
     SqlPost,
@@ -61,7 +60,7 @@ async def get_sql_store() -> SQLStore | None:
             store = SQLStore(uri=sql_url)
             await store.register(
                 [
-                    SqlAuthor,
+                    # SqlAuthor,
                     SqlTag,
                     SqlTagLink,
                     SqlPost,

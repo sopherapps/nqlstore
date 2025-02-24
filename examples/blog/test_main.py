@@ -1,8 +1,9 @@
+from datetime import datetime
 from typing import Any
 
 import pytest
 from bson import ObjectId
-from conftest import ACCESS_TOKEN, COMMENT_LIST, POST_LISTS
+from conftest import ACCESS_TOKEN, AUTHOR, COMMENT_LIST, POST_LISTS
 from fastapi.testclient import TestClient
 from main import MongoPost, RedisPost, SqlPost
 
@@ -15,13 +16,14 @@ _TAG_SEARCH_TERMS = ["art", "om"]
 @pytest.mark.asyncio
 @pytest.mark.parametrize("post", POST_LISTS)
 async def test_create_sql_post(
-    client_with_sql: TestClient,
-    sql_store: SQLStore,
-    post: dict,
+    client_with_sql: TestClient, sql_store: SQLStore, post: dict, freezer
 ):
     """POST to /posts creates a post in sql and returns it"""
+    timestamp = datetime.now().isoformat()
     with client_with_sql as client:
-        response = client.post("/posts", json=post)
+        response = client.post(
+            "/posts", json=post, headers={"Authorization": f"Bearer {ACCESS_TOKEN}"}
+        )
 
         got = response.json()
         post_id = got["id"]
@@ -30,7 +32,9 @@ async def test_create_sql_post(
         expected = {
             "id": post_id,
             "title": post["title"],
-            "content": post.get("content"),
+            "content": post.get("content", ""),
+            "author": {"id": 1, **AUTHOR},
+            "author_id": 1,
             "tags": [
                 {
                     **raw,
@@ -39,6 +43,8 @@ async def test_create_sql_post(
                 for raw, resp in zip(raw_tags, resp_tags)
             ],
             "comments": [],
+            "created_at": timestamp,
+            "updated_at": timestamp,
         }
 
         db_query = {"id": {"$eq": post_id}}
