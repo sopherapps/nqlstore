@@ -56,6 +56,7 @@ try:
         _ColumnExpressionArgument,
         _ColumnExpressionOrStrLabelArgument,
     )
+    from sqlalchemy import func
     from sqlmodel import SQLModel as _SQLModel
     from sqlmodel import delete, insert, select, update
     from sqlmodel._compat import post_init_field_info
@@ -65,6 +66,7 @@ try:
     from sqlmodel.main import IncEx, NoArgAnyCallable, OnDeleteType
     from sqlmodel.main import RelationshipInfo as _RelationshipInfo
 except ImportError:
+    import types
     from typing import Mapping, Optional, Sequence
     from typing import Set
     from typing import Set as _ColumnExpressionArgument
@@ -90,6 +92,8 @@ except ImportError:
     subqueryload = lambda *a, **kwargs: dict(**kwargs)
     DetachedInstanceError = RuntimeError
     IncEx = Set[Any] | dict
+    func = types.ModuleType("func")
+    func.max = lambda *a, **kwargs: dict(**kwargs)
 
     class _SqlFieldInfo(_FieldInfo): ...
 

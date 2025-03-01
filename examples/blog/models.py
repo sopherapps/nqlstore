@@ -47,7 +47,6 @@ RedisPost = JsonModel(
 
 # sqlite models
 SqlInternalAuthor = SQLModel("SqlInternalAuthor", InternalAuthor)
-# SqlAuthor = SQLModel("SqlAuthor", Author, table=False)
 SqlComment = SQLModel(
     "SqlComment", Comment, relationships={"author": SqlInternalAuthor | None}
 )

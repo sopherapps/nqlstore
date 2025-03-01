@@ -1,5 +1,6 @@
 """SQL implementation"""
 
+import copy
 import sys
 from collections.abc import Mapping, MutableMapping
 from typing import Any, Dict, Iterable, Literal, TypeVar, Union
@@ -28,6 +29,7 @@ from ._compat import (
     sqlite_insert,
     subqueryload,
     update,
+    func,
 )
 from ._field import Field, get_field_definitions
 from .query.parsers import QueryParser
@@ -173,6 +175,7 @@ class SQLStore(BaseStore):
         updates: dict | None = None,
         **kwargs,
     ) -> list[_T]:
+        updates = copy.deepcopy(updates)
         async with AsyncSession(self._engine) as session:
             if query:
                 filters = (*filters, *self._parser.to_sql(model, query=query))
@@ -198,27 +201,40 @@ class SQLStore(BaseStore):
                 except KeyError:
                     pass
 
-            stmt = (
-                update(model)
-                .where(*non_rel_filters, *rel_filters)
-                .values(**updates)
-                .returning(model.__table__)
-            )
+            if len(updates) > 0:
+                stmt = (
+                    update(model)
+                    .where(*non_rel_filters, *rel_filters)
+                    .values(**updates)
+                    .returning(model)
+                )
 
-            cursor = await session.stream(stmt)
-            raw_results = await cursor.fetchall()
-            results = [model.model_validate(row._mapping) for row in raw_results]
-            result_ids = [v.id for v in results]
-            # insert_func = await _get_insert(session)
+                cursor = await session.stream_scalars(stmt)
+                results = await cursor.fetchall()
+                result_ids = [v.id for v in results]
+            else:
+                results = await self.find(model, *filters)
+                result_ids = [v.id for v in results]
+
+            insert_func = await _get_insert(session)
 
             for k, v in embedded_updates.items():
                 field = relations_mapper[k]
                 field_props = field.property
                 field_model = field_props.mapper.class_
+                link_model = model.__sqlmodel_relationships__[k].link_model
+
                 # fk = foreign key
-                fk_field_name = field_props.primaryjoin.right.name
-                fk_field = getattr(field_model, fk_field_name)
-                parent_id_field = field_props.primaryjoin.left.name
+                if link_model is not None:
+                    child_id_field_name = field_props.secondaryjoin.left.name
+                    parent_id_field_name = field_props.primaryjoin.left.name
+                    child_fk_field_name = field_props.secondaryjoin.right.name
+                    parent_fk_field_name = field_props.primaryjoin.right.name
+
+                else:
+                    parent_id_field_name = field_props.primaryjoin.left.name
+                    child_fk_field_name = field_props.primaryjoin.right.name
+                    fk_field = getattr(field_model, child_fk_field_name)
 
                 # get the foreign keys to use in resetting all affected
                 # relationships;
@@ -226,29 +242,127 @@ class SQLStore(BaseStore):
                 # the old relations.
                 # Note: this operation is strictly replace, not patch
                 embedded_values = []
+                through_table_values = []
                 fk_values = []
                 for parent in results:
                     parent_partial, embedded_value = _parse_embedded(v, field, parent)
-                    if isinstance(embedded_value, Iterable):
-                        embedded_values += embedded_value
-                        fk_values.append(getattr(parent, parent_id_field))
-                    elif isinstance(embedded_value, _SQLModel):
+                    initial_embedded_values_len = len(embedded_values)
+                    if isinstance(embedded_value, _SQLModel):
                         embedded_values.append(embedded_value)
-                        fk_values.append(getattr(parent, parent_id_field))
+                    elif isinstance(embedded_value, Iterable):
+                        embedded_values += embedded_value
 
-                # insert the related items
+                    if link_model is not None:
+                        index_range = (
+                            initial_embedded_values_len,
+                            len(embedded_values),
+                        )
+                        through_table_values.append(
+                            {
+                                parent_fk_field_name: getattr(
+                                    parent, parent_id_field_name
+                                ),
+                                "index_range": index_range,
+                            }
+                        )
+                    else:
+                        fk_values.append(getattr(parent, parent_id_field_name))
+
+                    # for many-to-one relationships, the parent
+                    # also needs to be updated.
+                    # add the partial update of the parent
+                    for key, val in parent_partial.items():
+                        setattr(parent, key, val)
+
                 if len(embedded_values) > 0:
                     # Reset the relationship; delete all other related items
                     # Currently, this operation replaces all past relations
-                    reset_stmt = delete(field_model).where(fk_field.in_(fk_values))
-                    await session.stream(reset_stmt)
+                    if fk_field is not None and len(fk_values) > 0:
+                        reset_stmt = delete(field_model).where(fk_field.in_(fk_values))
+                        await session.stream(reset_stmt)
 
-                    # insert the latest changes
-                    embed_stmt = insert(field_model).returning(field_model)
-                    await session.stream_scalars(embed_stmt, embedded_values)
+                    # insert the embedded items
+                    try:
+                        # PostgreSQL and SQLite support on_conflict_do_nothing
+                        embed_stmt = (
+                            insert_func(field_model)
+                            .on_conflict_do_nothing()
+                            .returning(field_model)
+                        )
+                    except AttributeError:
+                        # MySQL supports prefix("IGNORE")
+                        # Other databases might fail at this point
+                        embed_stmt = (
+                            insert_func(field_model)
+                            .prefix_with("IGNORE", dialect="mysql")
+                            .returning(field_model)
+                        )
+
+                    embedded_cursor = await session.stream_scalars(
+                        embed_stmt, embedded_values
+                    )
+                    embedded_results = await embedded_cursor.all()
+
+                    if len(through_table_values) > 0:
+                        parent_fk_values = [
+                            v[parent_fk_field_name] for v in through_table_values
+                        ]
+                        if len(parent_fk_values) > 0:
+                            # Reset the relationship; delete all other related items
+                            # Currently, this operation replaces all past relations
+                            parent_fk_field = getattr(link_model, parent_id_field_name)
+                            reset_stmt = delete(link_model).where(
+                                parent_fk_field.in_(parent_fk_values)
+                            )
+                            await session.stream(reset_stmt)
+
+                        # insert the through table records
+                        try:
+                            # PostgreSQL and SQLite support on_conflict_do_nothing
+                            through_table_stmt = (
+                                insert_func(link_model)
+                                .on_conflict_do_nothing()
+                                .returning(link_model)
+                            )
+                        except AttributeError:
+                            # MySQL supports prefix("IGNORE")
+                            # Other databases might fail at this point
+                            through_table_stmt = (
+                                insert_func(link_model)
+                                .prefix_with("IGNORE", dialect="mysql")
+                                .returning(link_model)
+                            )
+
+                        # compute the next id auto-incremented
+                        next_id = await session.scalar(func.max(link_model.id))
+                        next_id = (next_id or 0) + 1
+
+                        through_table_values = [
+                            {
+                                parent_fk_field_name: v[parent_fk_field_name],
+                                child_fk_field_name: getattr(
+                                    child, child_id_field_name
+                                ),
+                            }
+                            for v in through_table_values
+                            for child in embedded_results[
+                                v["index_range"][0] : v["index_range"][1]
+                            ]
+                        ]
+                        through_table_values = [
+                            link_model(id=next_id + idx, **v)
+                            for idx, v in enumerate(through_table_values)
+                        ]
+                        await session.stream_scalars(
+                            through_table_stmt, through_table_values
+                        )
+
+            # update the updated parents
+            session.add_all(results)
 
             await session.commit()
-            return await self.find(model, model.id.in_(result_ids))
+            refreshed_results = await self.find(model, model.id.in_(result_ids))
+            return list(refreshed_results)
 
     async def delete(
         self,
@@ -586,7 +700,7 @@ def _parse_embedded(
         # # add a foreign key value to link back to parent
         return {fk_field: fk_value}, field_model.model_validate(value)
 
-    if direction in (RelationshipDirection.ONETOMANY, RelationshipDirection.MANYTOMANY):
+    if direction == RelationshipDirection.ONETOMANY:
         # add a foreign key values to link back to parent
         if issubclass(wrapper_type, (list, tuple, set)):
             return {}, wrapper_type(
@@ -595,6 +709,11 @@ def _parse_embedded(
                     for v in value
                 ]
             )
+
+    if direction == RelationshipDirection.MANYTOMANY:
+        # add a foreign key values to link back to parent
+        if issubclass(wrapper_type, (list, tuple, set)):
+            return {}, wrapper_type([field_model.model_validate(v) for v in value])
 
     raise NotImplementedError(
         f"relationship {direction} of type annotation {wrapper_type} not supported yet"

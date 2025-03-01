@@ -11,6 +11,7 @@ from nqlstore import MongoStore, RedisStore, SQLStore
 
 _TITLE_SEARCH_TERMS = ["ho", "oo", "work"]
 _TAG_SEARCH_TERMS = ["art", "om"]
+_HEADERS = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
 
 
 @pytest.mark.asyncio
@@ -21,9 +22,7 @@ async def test_create_sql_post(
     """POST to /posts creates a post in sql and returns it"""
     timestamp = datetime.now().isoformat()
     with client_with_sql as client:
-        response = client.post(
-            "/posts", json=post, headers={"Authorization": f"Bearer {ACCESS_TOKEN}"}
-        )
+        response = client.post("/posts", json=post, headers=_HEADERS)
 
         got = response.json()
         post_id = got["id"]
@@ -61,12 +60,12 @@ async def test_create_redis_post(
     client_with_redis: TestClient,
     redis_store: RedisStore,
     post: dict,
+    freezer,
 ):
     """POST to /posts creates a post in redis and returns it"""
+    timestamp = datetime.now().isoformat()
     with client_with_redis as client:
-        response = client.post(
-            "/posts", json=post, headers={"Authorization": f"Bearer {ACCESS_TOKEN}"}
-        )
+        response = client.post("/posts", json=post, headers=_HEADERS)
 
         got = response.json()
         post_id = got["id"]
@@ -75,7 +74,8 @@ async def test_create_redis_post(
         expected = {
             "id": post_id,
             "title": post["title"],
-            "content": post.get("content"),
+            "content": post.get("content", ""),
+            "author": {**got["author"], **AUTHOR},
             "pk": post_id,
             "tags": [
                 {
@@ -86,6 +86,8 @@ async def test_create_redis_post(
                 for raw, resp in zip(raw_tags, resp_tags)
             ],
             "comments": [],
+            "created_at": timestamp,
+            "updated_at": timestamp,
         }
 
         db_query = {"id": {"$eq": post_id}}
@@ -102,10 +104,12 @@ async def test_create_mongo_post(
     client_with_mongo: TestClient,
     mongo_store: MongoStore,
     post: dict,
+    freezer,
 ):
     """POST to /posts creates a post in redis and returns it"""
+    timestamp = datetime.now().isoformat()
     with client_with_mongo as client:
-        response = client.post("/posts", json=post)
+        response = client.post("/posts", json=post, headers=_HEADERS)
 
         got = response.json()
         post_id = got["id"]
@@ -113,14 +117,12 @@ async def test_create_mongo_post(
         expected = {
             "id": post_id,
             "title": post["title"],
-            "content": post.get("content"),
-            "tags": [
-                {
-                    **raw,
-                }
-                for raw in raw_tags
-            ],
+            "content": post.get("content", ""),
+            "author": {"name": AUTHOR["name"]},
+            "tags": raw_tags,
             "comments": [],
+            "created_at": timestamp,
+            "updated_at": timestamp,
         }
 
         db_query = {"_id": {"$eq": ObjectId(post_id)}}
@@ -138,22 +140,26 @@ async def test_update_sql_post(
     sql_store: SQLStore,
     sql_posts: list[SqlPost],
     index: int,
+    freezer,
 ):
     """PUT to /posts/{id} updates the sql post of given id and returns updated version"""
+    timestamp = datetime.now().isoformat()
     with client_with_sql as client:
         post = sql_posts[index]
+        post_dict = post.model_dump(mode="json", exclude_none=True, exclude_unset=True)
         id_ = post.id
         update = {
+            **post_dict,
             "name": "some other name",
-            "todos": [
-                *post.tags,
+            "tags": [
+                *post_dict["tags"],
                 {"title": "another one"},
                 {"title": "another one again"},
             ],
-            "comments": [*post.comments, *COMMENT_LIST[index:]],
+            "comments": [*post_dict["comments"], *COMMENT_LIST[index:]],
         }
 
-        response = client.put(f"/posts/{id_}", json=update)
+        response = client.put(f"/posts/{id_}", json=update, headers=_HEADERS)
 
         got = response.json()
         expected = {

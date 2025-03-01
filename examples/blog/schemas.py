@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel
-from utils import current_timestamp
+from utils import current_timestamp, Partial
 
 from nqlstore import Field, Relationship
 
@@ -33,15 +33,8 @@ class Post(BaseModel):
         disable_on_redis=True,
     )
     author: Author | None = Relationship(default=None)
-    comments: list["Comment"] = Relationship(
-        default=[],
-        disable_on_redis=True,
-    )
-    tags: list["Tag"] = Relationship(
-        default=[],
-        link_model="TagLink",
-        disable_on_redis=True,
-    )
+    comments: list["Comment"] = Relationship(default=[])
+    tags: list["Tag"] = Relationship(default=[], link_model="TagLink")
     created_at: str = Field(index=True, default_factory=current_timestamp)
     updated_at: str = Field(index=True, default_factory=current_timestamp)
 
@@ -89,7 +82,7 @@ class TagLink(BaseModel):
 class Tag(BaseModel):
     """The tags to help searching for posts"""
 
-    title: str = Field(index=True, unique=True, full_text_search=True)
+    title: str = Field(index=True, unique=True)
 
 
 class TokenResponse(BaseModel):
@@ -97,3 +90,7 @@ class TokenResponse(BaseModel):
 
     access_token: str
     token_type: str
+
+
+# Partial models
+PartialPost = Partial("PartialPost", Post)
