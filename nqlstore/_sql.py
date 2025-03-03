@@ -3,7 +3,7 @@
 import copy
 import sys
 from collections.abc import Mapping, MutableMapping
-from typing import Any, Dict, Iterable, Literal, TypeVar, Union
+from typing import Any, Dict, Iterable, Literal, Union
 
 from pydantic import create_model
 from pydantic.main import ModelT
@@ -35,8 +35,86 @@ from ._field import Field, get_field_definitions
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
-_T = TypeVar("_T", bound=_SQLModel)
 _Filter = _ColumnExpressionArgument[bool] | bool
+
+class _SQLModelMeta(_SQLModel):
+    """The base class for all SQL models"""
+
+    id: int | None = Field(default=None, primary_key=True)
+    __rel_field_cache__: dict = {}
+    """dict of (name, Field) that have associated relationships"""
+
+    @classmethod
+    @property
+    def __relational_fields__(cls) -> dict[str, Any]:
+        """dict of (name, Field) that have associated relationships"""
+
+        cls_fullname = f"{cls.__module__}.{cls.__qualname__}"
+        try:
+            return cls.__rel_field_cache__[cls_fullname]
+        except KeyError:
+            value = {
+                k: v
+                for k, v in cls.__mapper__.all_orm_descriptors.items()
+                if isinstance(v.property, RelationshipProperty)
+            }
+            cls.__rel_field_cache__[cls_fullname] = value
+            return value
+
+
+    def model_dump(
+        self,
+        *,
+        mode: Union[Literal["json", "python"], str] = "python",
+        include: IncEx = None,
+        exclude: IncEx = None,
+        context: Union[Dict[str, Any], None] = None,
+        by_alias: bool = False,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+        round_trip: bool = False,
+        warnings: Union[bool, Literal["none", "warn", "error"]] = True,
+        serialize_as_any: bool = False,
+    ) -> Dict[str, Any]:
+        data = super().model_dump(
+            mode=mode,
+            include=include,
+            exclude=exclude,
+            context=context,
+            by_alias=by_alias,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+            round_trip=round_trip,
+            warnings=warnings,
+            serialize_as_any=serialize_as_any,
+        )
+        relations_mappers = self.__class__.__relational_fields__
+        for k, field in relations_mappers.items():
+            if exclude is None or k not in exclude:
+                try:
+                    value = getattr(self, k, None)
+                except DetachedInstanceError:
+                    # ignore lazy loaded values
+                    continue
+
+                if value is not None or not exclude_none:
+                    data[k] = _serialize_embedded(
+                        value,
+                        field=field,
+                        mode=mode,
+                        context=context,
+                        by_alias=by_alias,
+                        exclude_unset=exclude_unset,
+                        exclude_defaults=exclude_defaults,
+                        exclude_none=exclude_none,
+                        round_trip=round_trip,
+                        warnings=warnings,
+                        serialize_as_any=serialize_as_any,
+                    )
+
+        return data
 
 
 class SQLStore(BaseStore):
@@ -46,7 +124,9 @@ class SQLStore(BaseStore):
         super().__init__(uri, parser=parser, **kwargs)
         self._engine = create_async_engine(uri, **kwargs)
 
-    async def register(self, models: list[type[_T]], checkfirst: bool = True):
+    async def register(
+        self, models: list[type[_SQLModelMeta]], checkfirst: bool = True
+    ):
         tables = [v.__table__ for v in models if hasattr(v, "__table__")]
         async with self._engine.begin() as conn:
             await conn.run_sync(
@@ -54,12 +134,15 @@ class SQLStore(BaseStore):
             )
 
     async def insert(
-        self, model: type[_T], items: Iterable[_T | dict], **kwargs
-    ) -> list[_T]:
+        self,
+        model: type[_SQLModelMeta],
+        items: Iterable[_SQLModelMeta | dict],
+        **kwargs,
+    ) -> list[_SQLModelMeta]:
         parsed_items = [
             v if isinstance(v, model) else model.model_validate(v) for v in items
         ]
-        relations_mapper = _get_relations_mapper(model)
+        relations_mapper = model.__relational_fields__
 
         async with AsyncSession(self._engine) as session:
             insert_func = await _get_insert(session)
@@ -123,101 +206,51 @@ class SQLStore(BaseStore):
 
     async def find(
         self,
-        model: type[_T],
+        model: type[_SQLModelMeta],
         *filters: _Filter,
         query: QuerySelector | None = None,
         skip: int = 0,
         limit: int | None = None,
         sort: tuple[_ColumnExpressionOrStrLabelArgument[Any]] = (),
         **kwargs,
-    ) -> list[_T]:
+    ) -> list[_SQLModelMeta]:
         async with AsyncSession(self._engine) as session:
             if query:
                 filters = (*filters, *self._parser.to_sql(model, query=query))
-
-            relations = _get_relations(model)
-
-            # eagerly load all relationships so that no validation errors occur due
-            # to missing session if there is an attempt to load them lazily later
-            eager_load_opts = [subqueryload(v) for v in relations]
-
-            filtered_relations = _get_filtered_relations(
-                filters=filters,
-                relations=relations,
+            return await _find(
+                session, model, *filters, skip=skip, limit=limit, sort=sort
             )
-
-            # Note that we need to treat relations that are referenced in the filters
-            # differently from those that are not. This is because filtering basing on a relationship
-            # requires the use of an inner join. Yet an inner join automatically excludes rows
-            # that are have null for a given relationship.
-            #
-            # An outer join on the other hand would just return all the rows in the left table.
-            # We thus need to do an inner join on tables that are being filtered.
-            stmt = select(model)
-            for rel in filtered_relations:
-                stmt = stmt.join_from(model, rel)
-
-            cursor = await session.stream_scalars(
-                stmt.options(*eager_load_opts)
-                .where(*filters)
-                .limit(limit)
-                .offset(skip)
-                .order_by(*sort)
-            )
-            results = await cursor.all()
-            return list(results)
 
     async def update(
         self,
-        model: type[_T],
+        model: type[_SQLModelMeta],
         *filters: _Filter,
         query: QuerySelector | None = None,
         updates: dict | None = None,
         **kwargs,
-    ) -> list[_T]:
+    ) -> list[_SQLModelMeta]:
         updates = copy.deepcopy(updates)
         async with AsyncSession(self._engine) as session:
             if query:
                 filters = (*filters, *self._parser.to_sql(model, query=query))
 
-            # Construct filters that have sub queries
-            relations = _get_relations(model)
-            rel_filters, non_rel_filters = _sieve_rel_from_non_rel_filters(
-                filters=filters,
-                relations=relations,
+            relational_filters = _get_relational_filters(model, filters)
+            non_relational_filters = _get_non_relational_filters(model, filters)
+
+            # Let's update the fields that are not embedded model field
+            # and return the affected results
+            results = await _update_non_embedded_fields(
+                session,
+                model,
+                *non_relational_filters,
+                *relational_filters,
+                updates=updates,
             )
-            rel_filters = _to_subquery_based_filters(
-                model=model,
-                rel_filters=rel_filters,
-                relations=relations,
-            )
 
-            # dealing with nested models in the update
-            relations_mapper = _get_relations_mapper(model)
-            embedded_updates = {}
-            for k in relations_mapper:
-                try:
-                    embedded_updates[k] = updates.pop(k)
-                except KeyError:
-                    pass
-
-            if len(updates) > 0:
-                stmt = (
-                    update(model)
-                    .where(*non_rel_filters, *rel_filters)
-                    .values(**updates)
-                    .returning(model)
-                )
-
-                cursor = await session.stream_scalars(stmt)
-                results = await cursor.fetchall()
-                result_ids = [v.id for v in results]
-            else:
-                results = await self.find(model, *filters)
-                result_ids = [v.id for v in results]
-
+            embedded_updates = _get_relational_updates(model, updates)
+            result_ids = [v.id for v in results]
             insert_func = await _get_insert(session)
-
+            relations_mapper = model.__relational_fields__
             for k, v in embedded_updates.items():
                 field = relations_mapper[k]
                 field_props = field.property
@@ -366,99 +399,31 @@ class SQLStore(BaseStore):
 
     async def delete(
         self,
-        model: type[_T],
+        model: type[_SQLModelMeta],
         *filters: _Filter,
         query: QuerySelector | None = None,
         **kwargs,
-    ) -> list[_T]:
+    ) -> list[_SQLModelMeta]:
         async with AsyncSession(self._engine) as session:
             if query:
                 filters = (*filters, *self._parser.to_sql(model, query=query))
 
             deleted_items = await self.find(model, *filters)
 
-            # Construct filters that have sub queries
-            relations = _get_relations(model)
-            rel_filters, non_rel_filters = _sieve_rel_from_non_rel_filters(
-                filters=filters,
-                relations=relations,
-            )
-            rel_filters = _to_subquery_based_filters(
-                model=model,
-                rel_filters=rel_filters,
-                relations=relations,
-            )
+            relational_filters = _get_relational_filters(model, filters)
+            non_relational_filters = _get_non_relational_filters(model, filters)
+
             exec_options = {}
-            if len(rel_filters) > 0:
+            if len(relational_filters) > 0:
                 exec_options = {"is_delete_using": True}
 
             await session.stream(
                 delete(model)
-                .where(*non_rel_filters, *rel_filters)
+                .where(*non_relational_filters, *relational_filters)
                 .execution_options(**exec_options),
             )
             await session.commit()
             return deleted_items
-
-
-class _SQLModelMeta(_SQLModel):
-    """The base class for all SQL models"""
-
-    id: int | None = Field(default=None, primary_key=True)
-
-    def model_dump(
-        self,
-        *,
-        mode: Union[Literal["json", "python"], str] = "python",
-        include: IncEx = None,
-        exclude: IncEx = None,
-        context: Union[Dict[str, Any], None] = None,
-        by_alias: bool = False,
-        exclude_unset: bool = False,
-        exclude_defaults: bool = False,
-        exclude_none: bool = False,
-        round_trip: bool = False,
-        warnings: Union[bool, Literal["none", "warn", "error"]] = True,
-        serialize_as_any: bool = False,
-    ) -> Dict[str, Any]:
-        data = super().model_dump(
-            mode=mode,
-            include=include,
-            exclude=exclude,
-            context=context,
-            by_alias=by_alias,
-            exclude_unset=exclude_unset,
-            exclude_defaults=exclude_defaults,
-            exclude_none=exclude_none,
-            round_trip=round_trip,
-            warnings=warnings,
-            serialize_as_any=serialize_as_any,
-        )
-        relations_mappers = _get_relations_mapper(self.__class__)
-        for k, field in relations_mappers.items():
-            if exclude is None or k not in exclude:
-                try:
-                    value = getattr(self, k, None)
-                except DetachedInstanceError:
-                    # ignore lazy loaded values
-                    continue
-
-                if value is not None or not exclude_none:
-                    data[k] = _serialize_embedded(
-                        value,
-                        field=field,
-                        mode=mode,
-                        context=context,
-                        by_alias=by_alias,
-                        exclude_unset=exclude_unset,
-                        exclude_defaults=exclude_defaults,
-                        exclude_none=exclude_none,
-                        round_trip=round_trip,
-                        warnings=warnings,
-                        serialize_as_any=serialize_as_any,
-                    )
-
-        return data
 
 
 def SQLModel(
@@ -504,38 +469,6 @@ def SQLModel(
     )
 
 
-def _get_relations(model: type[_SQLModel]):
-    """Gets all the relational fields of the given model
-
-    Args:
-        model: the SQL model to inspect
-
-    Returns:
-        list of Fields that have associated relationships
-    """
-    return [
-        v
-        for v in model.__mapper__.all_orm_descriptors.values()
-        if isinstance(v.property, RelationshipProperty)
-    ]
-
-
-def _get_relations_mapper(model: type[_SQLModel]) -> dict[str, Any]:
-    """Gets all the relational fields with their names of the given model
-
-    Args:
-        model: the SQL model to inspect
-
-    Returns:
-        dict of (name, Field) that have associated relationships
-    """
-    return {
-        k: v
-        for k, v in model.__mapper__.all_orm_descriptors.items()
-        if isinstance(v.property, RelationshipProperty)
-    }
-
-
 def _get_filtered_tables(filters: Iterable[_Filter]) -> list[Table]:
     """Retrieves the tables that have been referenced in the filters
 
@@ -569,31 +502,51 @@ def _get_filtered_relations(
     return [rel for rel in relations if rel.property.target in filtered_tables]
 
 
-def _sieve_rel_from_non_rel_filters(
-    filters: Iterable[_Filter], relations: Iterable[InstrumentedAttribute[Any]]
-) -> tuple[list[_Filter], list[_Filter]]:
-    """Separates relational filters from non-relational ones
+def _get_relational_filters(
+    model: type[_SQLModelMeta],
+    filters: Iterable[_Filter],
+) -> list[_Filter]:
+    """Gets the filters that are concerned with relationships on this model
+
+    The filters returned are in subquery form since 'update' and 'delete'
+    in sqlalchemy do not have join and the only way to attach these filters
+    to the model is through sub queries
 
     Args:
+        model: the model under consideration
         filters: the tuple of filters to inspect
-        relations: all relations present on the model
 
     Returns:
-        tuple(rel, non_rel) where rel = list of relational filters,
-            and non_rel = non-relational filters
+        list of filters that are concerned with relationships on this model
     """
-    rel_targets = [v.property.target for v in relations]
-    rel = []
-    non_rel = []
+    relationships = list(model.__relational_fields__.values())
+    targets = [v.property.target for v in relationships]
+    plain_filters = [
+        item
+        for item in filters
+        if any([getattr(v, "table", None) in targets for v in item.get_children()])
+    ]
+    return _to_subquery_based_filters(model, plain_filters, relationships)
 
-    for filter_ in filters:
-        operands = filter_.get_children()
-        if any([getattr(v, "table", None) in rel_targets for v in operands]):
-            rel.append(filter_)
-        else:
-            non_rel.append(filter_)
 
-    return rel, non_rel
+def _get_non_relational_filters(
+    model: type[_SQLModelMeta], filters: Iterable[_Filter]
+) -> list[_Filter]:
+    """Gets the filters that are NOT concerned with relationships on this model
+
+    Args:
+        model: the model under consideration
+        filters: the tuple of filters to inspect
+
+    Returns:
+        list of filters that are NOT concerned with relationships on this model
+    """
+    targets = [v.property.target for v in model.__relational_fields__.values()]
+    return [
+        item
+        for item in filters
+        if not any([getattr(v, "table", None) in targets for v in item.get_children()])
+    ]
 
 
 def _to_subquery_based_filters(
@@ -770,3 +723,111 @@ async def _get_insert(session: AsyncSession):
         return pg_insert
 
     return insert
+
+
+async def _update_non_embedded_fields(
+    session: AsyncSession, model: type[_SQLModelMeta], *filters: _Filter, updates: dict
+):
+    """Updates only the non-embedded fields of the model
+
+    It ignores any relationships and returns the updated results
+
+    Args:
+        session: the sqlalchemy session
+        model: the model to be updated
+        filters: the filters against which to match the records that are to be updated
+        updates: the updates to add to each matched record
+
+    Returns:
+        the updated records
+    """
+    non_embedded_updates = _get_non_relational_updates(model, updates)
+    if len(non_embedded_updates) == 0:
+        # if we supplied an empty update dict to update,
+        # there would be an error
+        return await _find(session, model, *filters)
+
+    stmt = update(model).where(*filters).values(**non_embedded_updates).returning(model)
+    cursor = await session.stream_scalars(stmt)
+    return await cursor.fetchall()
+
+
+def _get_relational_updates(model: type[_SQLModelMeta], updates: dict) -> dict:
+    """Gets the updates that are affect only the relationships on this model
+
+    Args:
+        model: the model to be updated
+        updates: the dict of new values to updated on the matched records
+
+    Returns:
+        a dict with only updates concerning the relationships of the given model
+    """
+    return {k: v for k, v in updates.items() if k in model.__relational_fields__}
+
+
+def _get_non_relational_updates(model: type[_SQLModelMeta], updates: dict) -> dict:
+    """Gets the updates that do not affect relationships on this model
+
+    Args:
+        model: the model to be updated
+        updates: the dict of new values to updated on the matched records
+
+    Returns:
+        a dict with only updates that do not affect relationships on this model
+    """
+    return {k: v for k, v in updates.items() if k not in model.__relational_fields__}
+
+
+async def _find(
+    session: AsyncSession,
+    model: type[_SQLModelMeta],
+    /,
+    *filters: _Filter,
+    skip: int = 0,
+    limit: int | None = None,
+    sort: tuple[_ColumnExpressionOrStrLabelArgument[Any]] = (),
+) -> list[_SQLModelMeta]:
+    """Finds the records that match the given filters
+
+    Args:
+        session: the sqlalchemy session
+        model: the model that is to be searched
+        filters: the filters to match
+        skip: number of records to ignore at the top of the returned results; default is 0
+        limit: maximum number of records to return; default is None.
+        sort: fields to sort by; default = None
+
+    Returns:
+        the records tha match the given filters
+    """
+    relations = list(model.__relational_fields__.values())
+
+    # eagerly load all relationships so that no validation errors occur due
+    # to missing session if there is an attempt to load them lazily later
+    eager_load_opts = [subqueryload(v) for v in relations]
+
+    filtered_relations = _get_filtered_relations(
+        filters=filters,
+        relations=relations,
+    )
+
+    # Note that we need to treat relations that are referenced in the filters
+    # differently from those that are not. This is because filtering basing on a relationship
+    # requires the use of an inner join. Yet an inner join automatically excludes rows
+    # that are have null for a given relationship.
+    #
+    # An outer join on the other hand would just return all the rows in the left table.
+    # We thus need to do an inner join on tables that are being filtered.
+    stmt = select(model)
+    for rel in filtered_relations:
+        stmt = stmt.join_from(model, rel)
+
+    cursor = await session.stream_scalars(
+        stmt.options(*eager_load_opts)
+        .where(*filters)
+        .limit(limit)
+        .offset(skip)
+        .order_by(*sort)
+    )
+    results = await cursor.all()
+    return list(results)
