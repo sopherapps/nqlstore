@@ -150,7 +150,7 @@ async def test_update_sql_post(
         id_ = post.id
         update = {
             **post_dict,
-            "name": "some other name",
+            "title": "some other title",
             "tags": [
                 *post_dict["tags"],
                 {"title": "another one"},
@@ -170,8 +170,9 @@ async def test_update_sql_post(
                     **raw,
                     "id": final["id"],
                     "post_id": final["post_id"],
-                    "author": final["author"],
-                    "author_id": final["author_id"],
+                    "author_id": 1,
+                    "created_at": timestamp,
+                    "updated_at": timestamp,
                 }
                 for raw, final in zip(update["comments"], got["comments"])
             ],

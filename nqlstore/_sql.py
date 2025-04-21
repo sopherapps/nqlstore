@@ -23,19 +23,20 @@ from ._compat import (
     _SQLModel,
     create_async_engine,
     delete,
+    func,
     insert,
     pg_insert,
     select,
     sqlite_insert,
     subqueryload,
     update,
-    func,
 )
 from ._field import Field, get_field_definitions
 from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
 _Filter = _ColumnExpressionArgument[bool] | bool
+
 
 class _SQLModelMeta(_SQLModel):
     """The base class for all SQL models"""
@@ -60,7 +61,6 @@ class _SQLModelMeta(_SQLModel):
             }
             cls.__rel_field_cache__[cls_fullname] = value
             return value
-
 
     def model_dump(
         self,
@@ -161,19 +161,12 @@ class SQLStore(BaseStore):
                 for idx, record in enumerate(items):
                     parent = results[idx]
                     raw_value = _get_key_or_prop(record, k)
-                    parent_partial, embedded_value = _parse_embedded(
-                        raw_value, field, parent
-                    )
+                    embedded_value = _embed_related_value(parent, field, raw_value)
+
                     if isinstance(embedded_value, _SQLModel):
                         embedded_values.append(embedded_value)
                     elif isinstance(embedded_value, Iterable):
                         embedded_values += embedded_value
-
-                    # for many-to-one relationships, the parent
-                    # also needs to be updated.
-                    # add the partial update of the parent
-                    for key, val in parent_partial.items():
-                        setattr(parent, key, val)
 
                 # insert the related items
                 if len(embedded_values) > 0:
@@ -237,7 +230,7 @@ class SQLStore(BaseStore):
             relational_filters = _get_relational_filters(model, filters)
             non_relational_filters = _get_non_relational_filters(model, filters)
 
-            # Let's update the fields that are not embedded model field
+            # Let's update the fields that are not embedded model fields
             # and return the affected results
             results = await _update_non_embedded_fields(
                 session,
@@ -257,7 +250,7 @@ class SQLStore(BaseStore):
                 field_model = field_props.mapper.class_
                 link_model = model.__sqlmodel_relationships__[k].link_model
 
-                # fk = foreign key
+                # fk means foreign key
                 if link_model is not None:
                     child_id_field_name = field_props.secondaryjoin.left.name
                     parent_id_field_name = field_props.primaryjoin.left.name
@@ -271,6 +264,7 @@ class SQLStore(BaseStore):
 
                 # get the foreign keys to use in resetting all affected
                 # relationships;
+                # FIXME: comment above is unclear
                 # get parsed embedded values so that they can replace
                 # the old relations.
                 # Note: this operation is strictly replace, not patch
@@ -278,7 +272,7 @@ class SQLStore(BaseStore):
                 through_table_values = []
                 fk_values = []
                 for parent in results:
-                    parent_partial, embedded_value = _parse_embedded(v, field, parent)
+                    embedded_value = _embed_related_value(parent, field, v)
                     initial_embedded_values_len = len(embedded_values)
                     if isinstance(embedded_value, _SQLModel):
                         embedded_values.append(embedded_value)
@@ -286,6 +280,7 @@ class SQLStore(BaseStore):
                         embedded_values += embedded_value
 
                     if link_model is not None:
+                        # FIXME: unclear name 'index_range'
                         index_range = (
                             initial_embedded_values_len,
                             len(embedded_values),
@@ -300,12 +295,6 @@ class SQLStore(BaseStore):
                         )
                     else:
                         fk_values.append(getattr(parent, parent_id_field_name))
-
-                    # for many-to-one relationships, the parent
-                    # also needs to be updated.
-                    # add the partial update of the parent
-                    for key, val in parent_partial.items():
-                        setattr(parent, key, val)
 
                 if len(embedded_values) > 0:
                     # Reset the relationship; delete all other related items
@@ -623,6 +612,111 @@ def _with_value(obj: dict | Any, field: str, value: Any) -> Any:
     return obj
 
 
+def _embed_related_value(
+    parent: _SQLModel,
+    related_field: Any,
+    related_value: Iterable[dict | Any] | dict | Any,
+) -> Iterable[_SQLModel] | _SQLModel | None:
+    """Embeds a given relationship into the parent in place and returns the related records
+
+    Args:
+        parent: the model that contains the given relationships
+        related_field: the field that contains the given relationship
+        related_value: the values correspond to the related field
+
+    Returns:
+        the related record(s)
+    """
+    if related_value is None:
+        return None
+
+    props = related_field.property  # type: RelationshipProperty[Any]
+    wrapper_type = props.collection_class
+    field_model = props.mapper.class_
+    parent_foreign_key_field = props.primaryjoin.right.name
+    direction = props.direction
+
+    if direction == RelationshipDirection.MANYTOONE:
+        related_value_id_key = props.primaryjoin.left.name
+        parent_foreign_key_value = related_value.get(related_value_id_key)
+        # update the foreign key value in the parent
+        setattr(parent, parent_foreign_key_field, parent_foreign_key_value)
+        # create child
+        child = field_model.model_validate(related_value)
+        # update nested relationships
+        for field_name, field_type in field_model.__relational_fields__.items():
+            if isinstance(related_value, dict):
+                nested_related_value = related_value.get(field_name)
+            else:
+                nested_related_value = getattr(related_value, field_name)
+
+            nested_related_records = _embed_related_value(
+                parent=child,
+                related_field=field_type,
+                related_value=nested_related_value,
+            )
+            setattr(child, field_name, nested_related_records)
+
+        return child
+
+    elif direction == RelationshipDirection.ONETOMANY:
+        related_value_id_key = props.primaryjoin.left.name
+        parent_foreign_key_value = getattr(parent, related_value_id_key)
+        # add a foreign key values to link back to parent
+        if issubclass(wrapper_type, (list, tuple, set)):
+            embedded_records = []
+            for v in related_value:
+                child = field_model.model_validate(
+                    _with_value(v, parent_foreign_key_field, parent_foreign_key_value)
+                )
+
+                # update nested relationships
+                for field_name, field_type in field_model.__relational_fields__.items():
+                    if isinstance(v, dict):
+                        nested_related_value = v.get(field_name)
+                    else:
+                        nested_related_value = getattr(v, field_name)
+
+                    nested_related_records = _embed_related_value(
+                        parent=child,
+                        related_field=field_type,
+                        related_value=nested_related_value,
+                    )
+                    setattr(child, field_name, nested_related_records)
+
+                embedded_records.append(child)
+
+            return wrapper_type(embedded_records)
+
+    elif direction == RelationshipDirection.MANYTOMANY:
+        if issubclass(wrapper_type, (list, tuple, set)):
+            embedded_records = []
+            for v in related_value:
+                child = field_model.model_validate(v)
+
+                # update nested relationships
+                for field_name, field_type in field_model.__relational_fields__.items():
+                    if isinstance(v, dict):
+                        nested_related_value = v.get(field_name)
+                    else:
+                        nested_related_value = getattr(v, field_name)
+                    nested_related_records = _embed_related_value(
+                        parent=child,
+                        related_field=field_type,
+                        related_value=nested_related_value,
+                    )
+                    setattr(child, field_name, nested_related_records)
+
+                embedded_records.append(child)
+
+            return wrapper_type(embedded_records)
+
+    raise NotImplementedError(
+        f"relationship {direction} of type annotation {wrapper_type} not supported yet"
+    )
+
+
+# FIXME: Allow multiple levels of nesting
 def _parse_embedded(
     value: Iterable[dict | Any] | dict | Any, field: Any, parent: _SQLModel
 ) -> tuple[dict, Iterable[_SQLModel] | _SQLModel | None]:
@@ -649,7 +743,13 @@ def _parse_embedded(
     fk_value = getattr(parent, parent_id_field)
     direction = props.direction
 
+    # FIXME: Maybe check if any relationship value is passed by checking the keys of value
+    #   And then do a recursive embedded parse and return the field_model
+
     if direction == RelationshipDirection.MANYTOONE:
+        if any([k in field_model.__relational_fields__ for k in value]):
+            # FIXME: nested relationships exist
+            pass
         # # add a foreign key value to link back to parent
         return {fk_field: fk_value}, field_model.model_validate(value)
 
@@ -658,15 +758,31 @@ def _parse_embedded(
         if issubclass(wrapper_type, (list, tuple, set)):
             return {}, wrapper_type(
                 [
-                    field_model.model_validate(_with_value(v, fk_field, fk_value))
+                    (
+                        field_model.model_validate(_with_value(v, fk_field, fk_value))
+                        # FIXME: Add a proper call to nested recursion for all relational_fields
+                        if any([k in field_model.__relational_fields__ for k in v])
+                        else field_model.model_validate(
+                            _with_value(v, fk_field, fk_value)
+                        )
+                    )
                     for v in value
                 ]
             )
 
     if direction == RelationshipDirection.MANYTOMANY:
-        # add a foreign key values to link back to parent
         if issubclass(wrapper_type, (list, tuple, set)):
-            return {}, wrapper_type([field_model.model_validate(v) for v in value])
+            return {}, wrapper_type(
+                [
+                    (
+                        field_model.model_validate(v)
+                        # FIXME: Add a proper call to nested recursion for all relational_fields
+                        if any([k in field_model.__relational_fields__ for k in v])
+                        else field_model.model_validate(v)
+                    )
+                    for v in value
+                ]
+            )
 
     raise NotImplementedError(
         f"relationship {direction} of type annotation {wrapper_type} not supported yet"

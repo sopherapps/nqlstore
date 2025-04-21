@@ -3,11 +3,12 @@
 import copy
 import sys
 from datetime import datetime
-from typing import TypeVar, Optional, get_args, Literal, Any
+from typing import Any, Literal, Optional, TypeVar, get_args
 
 from pydantic import BaseModel, create_model
-from nqlstore._field import FieldInfo
 from pydantic.main import IncEx
+
+from nqlstore._field import FieldInfo
 
 _T = TypeVar("_T", bound=BaseModel)
 

@@ -41,7 +41,7 @@ except ImportError:
 sql imports; and their default if sqlmodel is missing
 """
 try:
-    from sqlalchemy import Column, Table
+    from sqlalchemy import Column, Table, func
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
     from sqlalchemy.ext.asyncio import create_async_engine
@@ -56,7 +56,6 @@ try:
         _ColumnExpressionArgument,
         _ColumnExpressionOrStrLabelArgument,
     )
-    from sqlalchemy import func
     from sqlmodel import SQLModel as _SQLModel
     from sqlmodel import delete, insert, select, update
     from sqlmodel._compat import post_init_field_info

@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel
-from utils import current_timestamp, Partial
+from utils import Partial, current_timestamp
 
 from nqlstore import Field, Relationship
 

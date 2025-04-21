@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 from models import MongoPost, RedisPost, SqlInternalAuthor, SqlPost
 from pydantic import BaseModel
-from schemas import InternalAuthor, Post, TokenResponse, PartialPost
+from schemas import InternalAuthor, PartialPost, Post, TokenResponse
 from stores import MongoStoreDep, RedisStoreDep, SqlStoreDep, clear_stores
 
 _ACCESS_TOKEN_EXPIRE_MINUTES = 30
