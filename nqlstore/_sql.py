@@ -3,7 +3,7 @@
 import copy
 import sys
 from collections.abc import Mapping, MutableMapping
-from typing import Any, Dict, Iterable, Literal, Union
+from typing import Any, Dict, Iterable, Literal, Sequence, TypeVar, Union
 
 from pydantic import create_model
 from pydantic.main import ModelT
@@ -36,6 +36,7 @@ from .query.parsers import QueryParser
 from .query.selectors import QuerySelector
 
 _Filter = _ColumnExpressionArgument[bool] | bool
+_T = TypeVar("_T")
 
 
 class _SQLModelMeta(_SQLModel):
@@ -145,9 +146,8 @@ class SQLStore(BaseStore):
         relations_mapper = model.__relational_fields__
 
         async with AsyncSession(self._engine) as session:
-            insert_func = await _get_insert(session)
-            stmt = insert_func(model).returning(model)
-            cursor = await session.stream_scalars(stmt, parsed_items)
+            insert_stmt = await _get_insert_func(session, model=model)
+            cursor = await session.stream_scalars(insert_stmt, parsed_items)
             results = await cursor.all()
             result_ids = [v.id for v in results]
 
@@ -161,7 +161,7 @@ class SQLStore(BaseStore):
                 for idx, record in enumerate(items):
                     parent = results[idx]
                     raw_value = _get_key_or_prop(record, k)
-                    embedded_value = _embed_related_value(parent, field, raw_value)
+                    embedded_value = _embed_value(parent, field, raw_value)
 
                     if isinstance(embedded_value, _SQLModel):
                         embedded_values.append(embedded_value)
@@ -171,23 +171,7 @@ class SQLStore(BaseStore):
                 # insert the related items
                 if len(embedded_values) > 0:
                     field_model = field.property.mapper.class_
-
-                    try:
-                        # PostgreSQL and SQLite support on_conflict_do_nothing
-                        embed_stmt = (
-                            insert_func(field_model)
-                            .on_conflict_do_nothing()
-                            .returning(field_model)
-                        )
-                    except AttributeError:
-                        # MySQL supports prefix("IGNORE")
-                        # Other databases might fail at this point
-                        embed_stmt = (
-                            insert_func(field_model)
-                            .prefix_with("IGNORE", dialect="mysql")
-                            .returning(field_model)
-                        )
-
+                    embed_stmt = await _get_insert_func(session, model=field_model)
                     await session.stream_scalars(embed_stmt, embedded_values)
 
             # update the updated parents
@@ -239,152 +223,16 @@ class SQLStore(BaseStore):
                 *relational_filters,
                 updates=updates,
             )
-
-            embedded_updates = _get_relational_updates(model, updates)
             result_ids = [v.id for v in results]
-            insert_func = await _get_insert(session)
-            relations_mapper = model.__relational_fields__
-            for k, v in embedded_updates.items():
-                field = relations_mapper[k]
-                field_props = field.property
-                field_model = field_props.mapper.class_
-                link_model = model.__sqlmodel_relationships__[k].link_model
 
-                # fk means foreign key
-                if link_model is not None:
-                    child_id_field_name = field_props.secondaryjoin.left.name
-                    parent_id_field_name = field_props.primaryjoin.left.name
-                    child_fk_field_name = field_props.secondaryjoin.right.name
-                    parent_fk_field_name = field_props.primaryjoin.right.name
-
-                else:
-                    parent_id_field_name = field_props.primaryjoin.left.name
-                    child_fk_field_name = field_props.primaryjoin.right.name
-                    fk_field = getattr(field_model, child_fk_field_name)
-
-                # get the foreign keys to use in resetting all affected
-                # relationships;
-                # FIXME: comment above is unclear
-                # get parsed embedded values so that they can replace
-                # the old relations.
-                # Note: this operation is strictly replace, not patch
-                embedded_values = []
-                through_table_values = []
-                fk_values = []
-                for parent in results:
-                    embedded_value = _embed_related_value(parent, field, v)
-                    initial_embedded_values_len = len(embedded_values)
-                    if isinstance(embedded_value, _SQLModel):
-                        embedded_values.append(embedded_value)
-                    elif isinstance(embedded_value, Iterable):
-                        embedded_values += embedded_value
-
-                    if link_model is not None:
-                        # FIXME: unclear name 'index_range'
-                        index_range = (
-                            initial_embedded_values_len,
-                            len(embedded_values),
-                        )
-                        through_table_values.append(
-                            {
-                                parent_fk_field_name: getattr(
-                                    parent, parent_id_field_name
-                                ),
-                                "index_range": index_range,
-                            }
-                        )
-                    else:
-                        fk_values.append(getattr(parent, parent_id_field_name))
-
-                if len(embedded_values) > 0:
-                    # Reset the relationship; delete all other related items
-                    # Currently, this operation replaces all past relations
-                    if fk_field is not None and len(fk_values) > 0:
-                        reset_stmt = delete(field_model).where(fk_field.in_(fk_values))
-                        await session.stream(reset_stmt)
-
-                    # insert the embedded items
-                    try:
-                        # PostgreSQL and SQLite support on_conflict_do_nothing
-                        embed_stmt = (
-                            insert_func(field_model)
-                            .on_conflict_do_nothing()
-                            .returning(field_model)
-                        )
-                    except AttributeError:
-                        # MySQL supports prefix("IGNORE")
-                        # Other databases might fail at this point
-                        embed_stmt = (
-                            insert_func(field_model)
-                            .prefix_with("IGNORE", dialect="mysql")
-                            .returning(field_model)
-                        )
-
-                    embedded_cursor = await session.stream_scalars(
-                        embed_stmt, embedded_values
-                    )
-                    embedded_results = await embedded_cursor.all()
-
-                    if len(through_table_values) > 0:
-                        parent_fk_values = [
-                            v[parent_fk_field_name] for v in through_table_values
-                        ]
-                        if len(parent_fk_values) > 0:
-                            # Reset the relationship; delete all other related items
-                            # Currently, this operation replaces all past relations
-                            parent_fk_field = getattr(link_model, parent_id_field_name)
-                            reset_stmt = delete(link_model).where(
-                                parent_fk_field.in_(parent_fk_values)
-                            )
-                            await session.stream(reset_stmt)
-
-                        # insert the through table records
-                        try:
-                            # PostgreSQL and SQLite support on_conflict_do_nothing
-                            through_table_stmt = (
-                                insert_func(link_model)
-                                .on_conflict_do_nothing()
-                                .returning(link_model)
-                            )
-                        except AttributeError:
-                            # MySQL supports prefix("IGNORE")
-                            # Other databases might fail at this point
-                            through_table_stmt = (
-                                insert_func(link_model)
-                                .prefix_with("IGNORE", dialect="mysql")
-                                .returning(link_model)
-                            )
-
-                        # compute the next id auto-incremented
-                        next_id = await session.scalar(func.max(link_model.id))
-                        next_id = (next_id or 0) + 1
-
-                        through_table_values = [
-                            {
-                                parent_fk_field_name: v[parent_fk_field_name],
-                                child_fk_field_name: getattr(
-                                    child, child_id_field_name
-                                ),
-                            }
-                            for v in through_table_values
-                            for child in embedded_results[
-                                v["index_range"][0] : v["index_range"][1]
-                            ]
-                        ]
-                        through_table_values = [
-                            link_model(id=next_id + idx, **v)
-                            for idx, v in enumerate(through_table_values)
-                        ]
-                        await session.stream_scalars(
-                            through_table_stmt, through_table_values
-                        )
-
-            # update the updated parents
-            session.add_all(results)
-
+            # Let's update the embedded fields also
+            await _update_embedded_fields(
+                session, model=model, records=results, updates=updates
+            )
             await session.commit()
+
             refreshed_results = await self.find(model, model.id.in_(result_ids))
-            return list(refreshed_results)
+            return refreshed_results
 
     async def delete(
         self,
@@ -612,48 +460,48 @@ def _with_value(obj: dict | Any, field: str, value: Any) -> Any:
     return obj
 
 
-def _embed_related_value(
+def _embed_value(
     parent: _SQLModel,
-    related_field: Any,
-    related_value: Iterable[dict | Any] | dict | Any,
+    relationship: Any,
+    value: Iterable[dict | Any] | dict | Any,
 ) -> Iterable[_SQLModel] | _SQLModel | None:
-    """Embeds a given relationship into the parent in place and returns the related records
+    """Embeds in place a given value into the parent basing on the given relationship
+
+    Note that the parent itself is changed to include the value
 
     Args:
         parent: the model that contains the given relationships
-        related_field: the field that contains the given relationship
-        related_value: the values correspond to the related field
+        relationship: the given relationship
+        value: the values correspond to the related field
 
     Returns:
-        the related record(s)
+        the embedded record(s)
     """
-    if related_value is None:
+    if value is None:
         return None
 
-    props = related_field.property  # type: RelationshipProperty[Any]
+    props = relationship.property  # type: RelationshipProperty[Any]
     wrapper_type = props.collection_class
-    field_model = props.mapper.class_
+    relationship_model = props.mapper.class_
     parent_foreign_key_field = props.primaryjoin.right.name
     direction = props.direction
 
     if direction == RelationshipDirection.MANYTOONE:
         related_value_id_key = props.primaryjoin.left.name
-        parent_foreign_key_value = related_value.get(related_value_id_key)
+        parent_foreign_key_value = value.get(related_value_id_key)
         # update the foreign key value in the parent
         setattr(parent, parent_foreign_key_field, parent_foreign_key_value)
         # create child
-        child = field_model.model_validate(related_value)
+        child = relationship_model.model_validate(value)
         # update nested relationships
-        for field_name, field_type in field_model.__relational_fields__.items():
-            if isinstance(related_value, dict):
-                nested_related_value = related_value.get(field_name)
+        for field_name, field_type in relationship_model.__relational_fields__.items():
+            if isinstance(value, dict):
+                nested_related_value = value.get(field_name)
             else:
-                nested_related_value = getattr(related_value, field_name)
+                nested_related_value = getattr(value, field_name)
 
-            nested_related_records = _embed_related_value(
-                parent=child,
-                related_field=field_type,
-                related_value=nested_related_value,
+            nested_related_records = _embed_value(
+                parent=child, relationship=field_type, value=nested_related_value
             )
             setattr(child, field_name, nested_related_records)
 
@@ -665,22 +513,25 @@ def _embed_related_value(
         # add a foreign key values to link back to parent
         if issubclass(wrapper_type, (list, tuple, set)):
             embedded_records = []
-            for v in related_value:
-                child = field_model.model_validate(
+            for v in value:
+                child = relationship_model.model_validate(
                     _with_value(v, parent_foreign_key_field, parent_foreign_key_value)
                 )
 
                 # update nested relationships
-                for field_name, field_type in field_model.__relational_fields__.items():
+                for (
+                    field_name,
+                    field_type,
+                ) in relationship_model.__relational_fields__.items():
                     if isinstance(v, dict):
                         nested_related_value = v.get(field_name)
                     else:
                         nested_related_value = getattr(v, field_name)
 
-                    nested_related_records = _embed_related_value(
+                    nested_related_records = _embed_value(
                         parent=child,
-                        related_field=field_type,
-                        related_value=nested_related_value,
+                        relationship=field_type,
+                        value=nested_related_value,
                     )
                     setattr(child, field_name, nested_related_records)
 
@@ -691,98 +542,28 @@ def _embed_related_value(
     elif direction == RelationshipDirection.MANYTOMANY:
         if issubclass(wrapper_type, (list, tuple, set)):
             embedded_records = []
-            for v in related_value:
-                child = field_model.model_validate(v)
+            for v in value:
+                child = relationship_model.model_validate(v)
 
                 # update nested relationships
-                for field_name, field_type in field_model.__relational_fields__.items():
+                for (
+                    field_name,
+                    field_type,
+                ) in relationship_model.__relational_fields__.items():
                     if isinstance(v, dict):
                         nested_related_value = v.get(field_name)
                     else:
                         nested_related_value = getattr(v, field_name)
-                    nested_related_records = _embed_related_value(
+                    nested_related_records = _embed_value(
                         parent=child,
-                        related_field=field_type,
-                        related_value=nested_related_value,
+                        relationship=field_type,
+                        value=nested_related_value,
                     )
                     setattr(child, field_name, nested_related_records)
 
                 embedded_records.append(child)
 
             return wrapper_type(embedded_records)
-
-    raise NotImplementedError(
-        f"relationship {direction} of type annotation {wrapper_type} not supported yet"
-    )
-
-
-# FIXME: Allow multiple levels of nesting
-def _parse_embedded(
-    value: Iterable[dict | Any] | dict | Any, field: Any, parent: _SQLModel
-) -> tuple[dict, Iterable[_SQLModel] | _SQLModel | None]:
-    """Parses embedded items that can be a single item or many into SQLModels
-
-    Args:
-        value: the value to parse
-        field: the field on which these embedded items are
-        parent: the parent SQLModel to which this value is attached
-
-    Returns:
-        tuple (parent_partial, embedded_models): where parent_partial is the partial update of the parent
-            and embedded_models is an iterable of SQLModel instances or a single SQLModel instance
-            or None if value is None
-    """
-    if value is None:
-        return {}, None
-
-    props = field.property  # type: RelationshipProperty[Any]
-    wrapper_type = props.collection_class
-    field_model = props.mapper.class_
-    fk_field = props.primaryjoin.right.name
-    parent_id_field = props.primaryjoin.left.name
-    fk_value = getattr(parent, parent_id_field)
-    direction = props.direction
-
-    # FIXME: Maybe check if any relationship value is passed by checking the keys of value
-    #   And then do a recursive embedded parse and return the field_model
-
-    if direction == RelationshipDirection.MANYTOONE:
-        if any([k in field_model.__relational_fields__ for k in value]):
-            # FIXME: nested relationships exist
-            pass
-        # # add a foreign key value to link back to parent
-        return {fk_field: fk_value}, field_model.model_validate(value)
-
-    if direction == RelationshipDirection.ONETOMANY:
-        # add a foreign key values to link back to parent
-        if issubclass(wrapper_type, (list, tuple, set)):
-            return {}, wrapper_type(
-                [
-                    (
-                        field_model.model_validate(_with_value(v, fk_field, fk_value))
-                        # FIXME: Add a proper call to nested recursion for all relational_fields
-                        if any([k in field_model.__relational_fields__ for k in v])
-                        else field_model.model_validate(
-                            _with_value(v, fk_field, fk_value)
-                        )
-                    )
-                    for v in value
-                ]
-            )
-
-    if direction == RelationshipDirection.MANYTOMANY:
-        if issubclass(wrapper_type, (list, tuple, set)):
-            return {}, wrapper_type(
-                [
-                    (
-                        field_model.model_validate(v)
-                        # FIXME: Add a proper call to nested recursion for all relational_fields
-                        if any([k in field_model.__relational_fields__ for k in v])
-                        else field_model.model_validate(v)
-                    )
-                    for v in value
-                ]
-            )
 
     raise NotImplementedError(
         f"relationship {direction} of type annotation {wrapper_type} not supported yet"
@@ -820,11 +601,12 @@ def _serialize_embedded(
     )
 
 
-async def _get_insert(session: AsyncSession):
+async def _get_insert_func(session: AsyncSession, model: type[_SQLModelMeta]):
     """Gets the insert statement for the given session
 
     Args:
         session: the async session connecting to the database
+        model: the model for which the insert statement is to be obtained
 
     Returns:
         the insert function
@@ -833,12 +615,25 @@ async def _get_insert(session: AsyncSession):
     dialect = conn.dialect
     dialect_name = dialect.name
 
-    if dialect_name == "sqlite":
-        return sqlite_insert
-    if dialect_name == "postgresql":
-        return pg_insert
+    native_insert_func = insert
 
-    return insert
+    if dialect_name == "sqlite":
+        native_insert_func = sqlite_insert
+    if dialect_name == "postgresql":
+        native_insert_func = pg_insert
+
+    # insert the embedded items
+    try:
+        # PostgreSQL and SQLite support on_conflict_do_nothing
+        return native_insert_func(model).on_conflict_do_nothing().returning(model)
+    except AttributeError:
+        # MySQL supports prefix("IGNORE")
+        # Other databases might fail at this point
+        return (
+            native_insert_func(model)
+            .prefix_with("IGNORE", dialect="mysql")
+            .returning(model)
+        )
 
 
 async def _update_non_embedded_fields(
@@ -866,6 +661,221 @@ async def _update_non_embedded_fields(
     stmt = update(model).where(*filters).values(**non_embedded_updates).returning(model)
     cursor = await session.stream_scalars(stmt)
     return await cursor.fetchall()
+
+
+async def _update_embedded_fields(
+    session: AsyncSession,
+    model: type[_SQLModelMeta],
+    records: list[_SQLModelMeta],
+    updates: dict,
+):
+    """Updates only the embedded fields of the model for the given records
+
+    It ignores any fields in the `updates` dict that are not for embedded models
+    Note: this operation is replaces the values of the embedded fields with the new values
+    passed in the `updates` dictionary as opposed to patching the pre-existing values.
+
+    Args:
+        session: the sqlalchemy session
+        model: the model to be updated
+        records: the db records to update
+        updates: the updates to add to each record
+    """
+    embedded_updates = _get_relational_updates(model, updates)
+    relations_mapper = model.__relational_fields__
+    for k, v in embedded_updates.items():
+        relationship = relations_mapper[k]
+        link_model = model.__sqlmodel_relationships__[k].link_model
+
+        # this does a replace operation; i.e. removes old values and replaces them with the updates
+        await _bulk_embedded_delete(
+            session, relationship=relationship, data=records, link_model=link_model
+        )
+        await _bulk_embedded_insert(
+            session,
+            relationship=relationship,
+            data=records,
+            link_model=link_model,
+            payload=v,
+        )
+
+    # update the updated parents
+    session.add_all(records)
+
+
+async def _bulk_embedded_insert(
+    session: AsyncSession,
+    relationship: Any,
+    data: list[_SQLModelMeta],
+    link_model: type[_SQLModelMeta] | None,
+    payload: Iterable[dict] | dict,
+) -> Sequence[_SQLModelMeta] | None:
+    """Inserts the payload into the data following the given relationship
+
+     It updates the database also
+
+    Args:
+        session: the database session
+        relationship: the relationship the payload has with the data's schema
+        link_model: the model for the through table
+        payload: the payload to merge into each record in the data
+
+    Returns:
+        the updated data including the embedded data in each record
+    """
+    relationship_props = relationship.property  # type: RelationshipProperty
+    relationship_model = relationship_props.mapper.class_
+
+    parsed_embedded_records = [_embed_value(v, relationship, payload) for v in data]
+
+    insert_stmt = await _get_insert_func(session, model=relationship_model)
+    embedded_cursor = await session.stream_scalars(
+        insert_stmt, _flatten_list(parsed_embedded_records)
+    )
+    embedded_db_records = await embedded_cursor.all()
+
+    parent_embedded_map = [
+        (parent, embedded_db_records[idx : idx + len(_as_list(raw_embedded))])
+        for idx, (parent, raw_embedded) in enumerate(zip(data, parsed_embedded_records))
+    ]
+
+    # insert through table values
+    await _bulk_insert_through_table_data(
+        session,
+        relationship=relationship,
+        link_model=link_model,
+        parent_embedded_map=parent_embedded_map,
+    )
+
+    return data
+
+
+async def _bulk_insert_through_table_data(
+    session: AsyncSession,
+    relationship: Any,
+    link_model: type[_SQLModelMeta] | None,
+    parent_embedded_map: list[tuple[_SQLModelMeta, list[_SQLModelMeta]]],
+):
+    """Inserts the link records into the through-table represented by the link_model
+
+    Args:
+        session: the database session
+        relationship: the relationship the embedded records are based on
+        link_model: the model for the through table
+        parent_embedded_map: the list of tuples of parent and its associated embedded db records
+    """
+    if link_model is not None:
+        relationship_props = relationship.property  # type: RelationshipProperty
+        child_id_field_name = relationship_props.secondaryjoin.left.name
+        parent_id_field_name = relationship_props.primaryjoin.left.name
+        child_fk_field_name = relationship_props.secondaryjoin.right.name
+        parent_fk_field_name = relationship_props.primaryjoin.right.name
+
+        link_raw_values = [
+            {
+                parent_fk_field_name: getattr(parent, parent_id_field_name),
+                child_fk_field_name: getattr(child, child_id_field_name),
+            }
+            for parent, children in enumerate(parent_embedded_map)
+            for child in children
+        ]
+
+        next_id = await _get_nextid(session, link_model)
+        link_model_values = [
+            link_model(id=next_id + idx, **v) for idx, v in enumerate(link_raw_values)
+        ]
+
+        insert_stmt = await _get_insert_func(session, model=link_model)
+        await session.stream_scalars(insert_stmt, link_model_values)
+
+
+async def _bulk_embedded_delete(
+    session: AsyncSession,
+    relationship: Any,
+    data: list[SQLModel],
+    link_model: type[_SQLModelMeta] | None,
+):
+    """Deletes the embedded records of the given parent records for the given relationship
+
+    Args:
+        session: the database session
+        relationship: the relationship whose embedded records are to be deleted for the given records
+        link_model: the model for the through table
+    """
+    relationship_props = relationship.property  # type: RelationshipProperty
+    relationship_model = relationship_props.mapper.class_
+
+    parent_id_field_name = relationship_props.primaryjoin.left.name
+    parent_foreign_keys = [getattr(item, parent_id_field_name) for item in data]
+
+    if link_model is None:
+        reverse_foreign_key_field_name = relationship_props.primaryjoin.right.name
+        reverse_foreign_key_field = getattr(
+            relationship_model, reverse_foreign_key_field_name
+        )
+        await session.stream(
+            delete(relationship_model).where(
+                reverse_foreign_key_field.in_(parent_foreign_keys)
+            )
+        )
+    else:
+        reverse_foreign_key_field = getattr(link_model, parent_id_field_name)
+        await session.stream(
+            delete(link_model).where(reverse_foreign_key_field.in_(parent_foreign_keys))
+        )
+
+
+async def _get_nextid(session: AsyncSession, model: type[_SQLModelMeta]):
+    """Gets the next id generator for the given model
+
+    It returns a generator for the auto-incremented integer ID
+
+    Args:
+        session: the database session
+        model: the model under consideration
+
+    Returns:
+        a generator for the auto-incremented integer ID for the given model
+    """
+    # compute the next id auto-incremented
+    next_id = await session.scalar(func.max(model.id))
+    next_id = (next_id or 0) + 1
+    return next_id
+
+
+def _flatten_list(data: list[_T | list[_T]]) -> list[_T]:
+    """Flattens a list that may have lists of items at some indices
+
+    Args:
+        data: the list to flatten
+
+    Returns:
+        the flattened list
+    """
+    results = []
+    for item in data:
+        if isinstance(item, Iterable) and not isinstance(item, Mapping):
+            results += _flatten_list(item)
+        else:
+            results.append(item)
+
+    return results
+
+
+def _as_list(value: Any) -> list:
+    """Wraps the value in a list if it is not an iterable
+
+    Args:
+        value: the value to wrap in a list if it is not one
+
+    Returns:
+        the value as a list if it is not already one
+    """
+    if isinstance(value, list):
+        return value
+    elif isinstance(value, Iterable) and not isinstance(value, Mapping):
+        return list(value)
+    return [value]
 
 
 def _get_relational_updates(model: type[_SQLModelMeta], updates: dict) -> dict:
