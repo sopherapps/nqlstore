@@ -698,7 +698,7 @@ async def _update_embedded_fields(
             link_model=link_model,
             payload=v,
         )
-
+    # FIXME: Should the added records be updated with their embedded values?
     # update the updated parents
     session.add_all(records)
 
@@ -776,7 +776,7 @@ async def _bulk_insert_through_table_data(
                 parent_fk_field_name: getattr(parent, parent_id_field_name),
                 child_fk_field_name: getattr(child, child_id_field_name),
             }
-            for parent, children in enumerate(parent_embedded_map)
+            for parent, children in parent_embedded_map
             for child in children
         ]
 
@@ -855,7 +855,7 @@ def _flatten_list(data: list[_T | list[_T]]) -> list[_T]:
     results = []
     for item in data:
         if isinstance(item, Iterable) and not isinstance(item, Mapping):
-            results += _flatten_list(item)
+            results += list(item)
         else:
             results.append(item)
 
