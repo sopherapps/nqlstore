@@ -21,7 +21,7 @@ MongoPost = MongoModel(
     "MongoPost",
     Post,
     embedded_models={
-        "author": MongoAuthor,
+        "author": MongoAuthor | None,
         "comments": list[MongoComment],
         "tags": list[MongoTag],
     },
@@ -39,7 +39,7 @@ RedisPost = JsonModel(
     "RedisPost",
     Post,
     embedded_models={
-        "author": RedisAuthor,
+        "author": RedisAuthor | None,
         "comments": list[RedisComment],
         "tags": list[RedisTag],
     },

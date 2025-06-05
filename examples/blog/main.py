@@ -112,8 +112,13 @@ async def search(
 
         if redis:
             # redis's regex search is not mature so we use its full text search
+            # Unfortunately, redis search does not permit us to search fields that are arrays.
             redis_query = [
-                (_get_redis_field(RedisPost, k) % f"*{v}*")
+                (
+                    (_get_redis_field(RedisPost, k) == f"{v}")
+                    if k == "tags.title"
+                    else (_get_redis_field(RedisPost, k) % f"*{v}*")
+                )
                 for k, v in query_dict.items()
             ]
             results += await redis.find(RedisPost, *redis_query)
