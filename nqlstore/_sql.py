@@ -47,7 +47,6 @@ class _SQLModelMeta(_SQLModel):
     """dict of (name, Field) that have associated relationships"""
 
     @classmethod
-    @property
     def __relational_fields__(cls) -> dict[str, Any]:
         """dict of (name, Field) that have associated relationships"""
 
@@ -91,7 +90,7 @@ class _SQLModelMeta(_SQLModel):
             warnings=warnings,
             serialize_as_any=serialize_as_any,
         )
-        relations_mappers = self.__class__.__relational_fields__
+        relations_mappers = self.__class__.__relational_fields__()
         for k, field in relations_mappers.items():
             if exclude is None or k not in exclude:
                 try:
@@ -143,7 +142,7 @@ class SQLStore(BaseStore):
         parsed_items = [
             v if isinstance(v, model) else model.model_validate(v) for v in items
         ]
-        relations_mapper = model.__relational_fields__
+        relations_mapper = model.__relational_fields__()
 
         async with AsyncSession(self._engine) as session:
             insert_stmt = await _get_insert_func(session, model=model)
@@ -356,7 +355,7 @@ def _get_relational_filters(
     Returns:
         list of filters that are concerned with relationships on this model
     """
-    relationships = list(model.__relational_fields__.values())
+    relationships = list(model.__relational_fields__().values())
     targets = [v.property.target for v in relationships]
     plain_filters = [
         item
@@ -378,7 +377,7 @@ def _get_non_relational_filters(
     Returns:
         list of filters that are NOT concerned with relationships on this model
     """
-    targets = [v.property.target for v in model.__relational_fields__.values()]
+    targets = [v.property.target for v in model.__relational_fields__().values()]
     return [
         item
         for item in filters
@@ -494,7 +493,10 @@ def _embed_value(
         # create child
         child = relationship_model.model_validate(value)
         # update nested relationships
-        for field_name, field_type in relationship_model.__relational_fields__.items():
+        for (
+            field_name,
+            field_type,
+        ) in relationship_model.__relational_fields__().items():
             if isinstance(value, dict):
                 nested_related_value = value.get(field_name)
             else:
@@ -522,7 +524,7 @@ def _embed_value(
                 for (
                     field_name,
                     field_type,
-                ) in relationship_model.__relational_fields__.items():
+                ) in relationship_model.__relational_fields__().items():
                     if isinstance(v, dict):
                         nested_related_value = v.get(field_name)
                     else:
@@ -549,7 +551,7 @@ def _embed_value(
                 for (
                     field_name,
                     field_type,
-                ) in relationship_model.__relational_fields__.items():
+                ) in relationship_model.__relational_fields__().items():
                     if isinstance(v, dict):
                         nested_related_value = v.get(field_name)
                     else:
@@ -682,7 +684,7 @@ async def _update_embedded_fields(
         updates: the updates to add to each record
     """
     embedded_updates = _get_relational_updates(model, updates)
-    relations_mapper = model.__relational_fields__
+    relations_mapper = model.__relational_fields__()
     for k, v in embedded_updates.items():
         relationship = relations_mapper[k]
         link_model = model.__sqlmodel_relationships__[k].link_model
@@ -888,7 +890,7 @@ def _get_relational_updates(model: type[_SQLModelMeta], updates: dict) -> dict:
     Returns:
         a dict with only updates concerning the relationships of the given model
     """
-    return {k: v for k, v in updates.items() if k in model.__relational_fields__}
+    return {k: v for k, v in updates.items() if k in model.__relational_fields__()}
 
 
 def _get_non_relational_updates(model: type[_SQLModelMeta], updates: dict) -> dict:
@@ -901,7 +903,7 @@ def _get_non_relational_updates(model: type[_SQLModelMeta], updates: dict) -> di
     Returns:
         a dict with only updates that do not affect relationships on this model
     """
-    return {k: v for k, v in updates.items() if k not in model.__relational_fields__}
+    return {k: v for k, v in updates.items() if k not in model.__relational_fields__()}
 
 
 async def _find(
@@ -926,7 +928,7 @@ async def _find(
     Returns:
         the records tha match the given filters
     """
-    relations = list(model.__relational_fields__.values())
+    relations = list(model.__relational_fields__().values())
 
     # eagerly load all relationships so that no validation errors occur due
     # to missing session if there is an attempt to load them lazily later

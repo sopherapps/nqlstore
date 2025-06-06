@@ -33,13 +33,13 @@ sql = [
     "greenlet~=3.1.1",
 ]
 mongo = ["beanie~=1.29.0"]
-redis = ["redis-om~=0.3.3"]
+redis = ["redis-om~=0.3.3,<0.3.4"]
 all = [
     "sqlmodel~=0.0.22",
     "aiosqlite~=0.20.0",
     "greenlet~=3.1.1",
     "beanie~=1.29.0",
-    "redis-om~=0.3.3",
+    "redis-om~=0.3.3,<0.3.4",
 ]
 
 [project.urls]
