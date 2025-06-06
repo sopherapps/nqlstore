@@ -107,7 +107,8 @@ jobs:
           cd $GITHUB_WORKSPACE/examples/${{ matrix.example_app }}
           python -m pip install --upgrade pip
           python --version
-          pip install -U ../.."[all,test]"
+          pip install -r requirements.txt
+          pip install -U ../.."[all]"
           black --check .
           pytest .
 
