@@ -259,6 +259,7 @@ class _EmbeddedJsonModelMeta(_EmbeddedJsonModel, abc.ABC):
     """Base model for all EmbeddedJsonModels. Helpful with typing"""
 
     id: str | None
+    __embedded_models__: dict
 
     @classmethod
     def set_db(cls, db: Redis):
@@ -275,9 +276,26 @@ class _EmbeddedJsonModelMeta(_EmbeddedJsonModel, abc.ABC):
         except AttributeError:
             cls.Meta.database = db
 
+        # cache the embedded models on the class
+        embedded_models = getattr(cls, "__embedded_models__", None)
+        if embedded_models is None:
+            embedded_models = [
+                model
+                for field in cls.model_fields.values()  # type: FieldInfo
+                for model in _get_embed_models(field.annotation)
+            ]
+            setattr(cls, "__embedded_models__", embedded_models)
+
+        # set db on embedded models also
+        for model in cls.__embedded_models__:
+            model.set_db(db)
+
 
 def EmbeddedJsonModel(
-    name: str, schema: type[ModelT], /
+    name: str,
+    schema: type[ModelT],
+    /,
+    embedded_models: dict[str, Type] = None,
 ) -> type[_EmbeddedJsonModelMeta] | type[ModelT]:
     """Creates a new EmbeddedJsonModel for the given schema for redis
 
@@ -288,11 +306,14 @@ def EmbeddedJsonModel(
     Args:
         name: the name of the model
         schema: the schema from which the model is to be made
+        embedded_models: a dict of embedded models of <field name>: annotation
 
     Returns:
         a EmbeddedJsonModel model class with the given name
     """
-    fields = get_field_definitions(schema, embedded_models=None, is_for_redis=True)
+    fields = get_field_definitions(
+        schema, embedded_models=embedded_models, is_for_redis=True
+    )
 
     return create_model(
         name,

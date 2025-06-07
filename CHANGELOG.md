@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Allowed `EmbeddedJsonModel`'s to also contain `EmbeddedJsonModel` if there is need.
+- Allowed extra key-word args to be passed to the `SQLModel()`
+- Made the defining of fields by calling `Field()` or `Relationship()` mandatory.
+  This is because SQLModel's require this, and fail if this is not the case.
+- Add support for "Many-to-One" relationships in SQL `insert()` implementation
+
+### Added
+
+- Added the [examples/blog](./examples/blog) example
+- Add the `link_model` parameter to the `SQLModel()` function to add link models used as through tables
+
 ## [0.1.6] - 2025-02-19
 
 ### Changed

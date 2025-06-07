@@ -41,9 +41,16 @@ except ImportError:
 sql imports; and their default if sqlmodel is missing
 """
 try:
-    from sqlalchemy import Column, Table
+    from sqlalchemy import Column, Table, func
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
     from sqlalchemy.ext.asyncio import create_async_engine
-    from sqlalchemy.orm import InstrumentedAttribute, RelationshipProperty, subqueryload
+    from sqlalchemy.orm import (
+        InstrumentedAttribute,
+        RelationshipDirection,
+        RelationshipProperty,
+        subqueryload,
+    )
     from sqlalchemy.orm.exc import DetachedInstanceError
     from sqlalchemy.sql._typing import (
         _ColumnExpressionArgument,
@@ -58,6 +65,7 @@ try:
     from sqlmodel.main import IncEx, NoArgAnyCallable, OnDeleteType
     from sqlmodel.main import RelationshipInfo as _RelationshipInfo
 except ImportError:
+    import types
     from typing import Mapping, Optional, Sequence
     from typing import Set
     from typing import Set as _ColumnExpressionArgument
@@ -75,14 +83,16 @@ except ImportError:
     OnDeleteType = Literal["CASCADE", "SET NULL", "RESTRICT"]
     Column = Any
     create_async_engine = lambda *a, **k: dict(**k)
-    delete = insert = select = update = create_async_engine
+    pg_insert = sqlite_insert = delete = insert = select = update = create_async_engine
     AsyncSession = Any
-    RelationshipProperty = Set
+    RelationshipDirection = RelationshipProperty = Set
     Table = Set
     InstrumentedAttribute = Set
     subqueryload = lambda *a, **kwargs: dict(**kwargs)
     DetachedInstanceError = RuntimeError
     IncEx = Set[Any] | dict
+    func = types.ModuleType("func")
+    func.max = lambda *a, **kwargs: dict(**kwargs)
 
     class _SqlFieldInfo(_FieldInfo): ...
 

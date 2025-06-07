@@ -122,8 +122,6 @@ async def test_update_native(sql_store, inserted_sql_libs):
     }
     matches_query = lambda v: v.name.startswith("Bu") and v.address == _TEST_ADDRESS
 
-    # in immediate response
-    # NOTE: redis startswith/contains on single letters is not supported by redis
     got = await sql_store.update(
         SqlLibrary,
         (SqlLibrary.name.startswith("Bu") & (SqlLibrary.address == _TEST_ADDRESS)),

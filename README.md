@@ -336,6 +336,11 @@ libraries = await redis_store.delete(
 
 - [ ] Add documentation site
 
+## Limitations
+
+This library is limited in some specific cases.
+Read through the [`LIMITATIONS.md`](./LIMITATIONS.md) file for more.
+
 ## Contributions
 
 Contributions are welcome. The docs have to maintained, the code has to be made cleaner, more idiomatic and faster,
