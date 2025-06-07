@@ -11,6 +11,7 @@ from nqlstore import MongoStore, RedisStore, SQLStore
 
 _TITLE_SEARCH_TERMS = ["ho", "oo", "work"]
 _TAG_SEARCH_TERMS = ["art", "om"]
+_HEADERS = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
 
 
 @pytest.mark.asyncio
@@ -21,9 +22,7 @@ async def test_create_sql_post(
     """POST to /posts creates a post in sql and returns it"""
     timestamp = datetime.now().isoformat()
     with client_with_sql as client:
-        response = client.post(
-            "/posts", json=post, headers={"Authorization": f"Bearer {ACCESS_TOKEN}"}
-        )
+        response = client.post("/posts", json=post, headers=_HEADERS)
 
         got = response.json()
         post_id = got["id"]
@@ -61,12 +60,12 @@ async def test_create_redis_post(
     client_with_redis: TestClient,
     redis_store: RedisStore,
     post: dict,
+    freezer,
 ):
     """POST to /posts creates a post in redis and returns it"""
+    timestamp = datetime.now().isoformat()
     with client_with_redis as client:
-        response = client.post(
-            "/posts", json=post, headers={"Authorization": f"Bearer {ACCESS_TOKEN}"}
-        )
+        response = client.post("/posts", json=post, headers=_HEADERS)
 
         got = response.json()
         post_id = got["id"]
@@ -75,7 +74,8 @@ async def test_create_redis_post(
         expected = {
             "id": post_id,
             "title": post["title"],
-            "content": post.get("content"),
+            "content": post.get("content", ""),
+            "author": {**got["author"], **AUTHOR},
             "pk": post_id,
             "tags": [
                 {
@@ -86,6 +86,8 @@ async def test_create_redis_post(
                 for raw, resp in zip(raw_tags, resp_tags)
             ],
             "comments": [],
+            "created_at": timestamp,
+            "updated_at": timestamp,
         }
 
         db_query = {"id": {"$eq": post_id}}
@@ -102,10 +104,12 @@ async def test_create_mongo_post(
     client_with_mongo: TestClient,
     mongo_store: MongoStore,
     post: dict,
+    freezer,
 ):
     """POST to /posts creates a post in redis and returns it"""
+    timestamp = datetime.now().isoformat()
     with client_with_mongo as client:
-        response = client.post("/posts", json=post)
+        response = client.post("/posts", json=post, headers=_HEADERS)
 
         got = response.json()
         post_id = got["id"]
@@ -113,14 +117,12 @@ async def test_create_mongo_post(
         expected = {
             "id": post_id,
             "title": post["title"],
-            "content": post.get("content"),
-            "tags": [
-                {
-                    **raw,
-                }
-                for raw in raw_tags
-            ],
+            "content": post.get("content", ""),
+            "author": {"name": AUTHOR["name"]},
+            "tags": raw_tags,
             "comments": [],
+            "created_at": timestamp,
+            "updated_at": timestamp,
         }
 
         db_query = {"_id": {"$eq": ObjectId(post_id)}}
@@ -138,22 +140,26 @@ async def test_update_sql_post(
     sql_store: SQLStore,
     sql_posts: list[SqlPost],
     index: int,
+    freezer,
 ):
     """PUT to /posts/{id} updates the sql post of given id and returns updated version"""
+    timestamp = datetime.now().isoformat()
     with client_with_sql as client:
         post = sql_posts[index]
+        post_dict = post.model_dump(mode="json", exclude_none=True, exclude_unset=True)
         id_ = post.id
         update = {
-            "name": "some other name",
-            "todos": [
-                *post.tags,
+            **post_dict,
+            "title": "some other title",
+            "tags": [
+                *post_dict["tags"],
                 {"title": "another one"},
                 {"title": "another one again"},
             ],
-            "comments": [*post.comments, *COMMENT_LIST[index:]],
+            "comments": [*post_dict["comments"], *COMMENT_LIST[index:]],
         }
 
-        response = client.put(f"/posts/{id_}", json=update)
+        response = client.put(f"/posts/{id_}", json=update, headers=_HEADERS)
 
         got = response.json()
         expected = {
@@ -164,8 +170,9 @@ async def test_update_sql_post(
                     **raw,
                     "id": final["id"],
                     "post_id": final["post_id"],
-                    "author": final["author"],
-                    "author_id": final["author_id"],
+                    "author_id": 1,
+                    "created_at": timestamp,
+                    "updated_at": timestamp,
                 }
                 for raw, final in zip(update["comments"], got["comments"])
             ],
@@ -192,22 +199,25 @@ async def test_update_redis_post(
     redis_store: RedisStore,
     redis_posts: list[RedisPost],
     index: int,
+    freezer,
 ):
     """PUT to /posts/{id} updates the redis post of given id and returns updated version"""
+    timestamp = datetime.now().isoformat()
     with client_with_redis as client:
         post = redis_posts[index]
+        post_dict = post.model_dump(mode="json", exclude_none=True, exclude_unset=True)
         id_ = post.id
         update = {
-            "name": "some other name",
-            "todos": [
-                *post.tags,
+            "title": "some other title",
+            "tags": [
+                *post_dict.get("tags", []),
                 {"title": "another one"},
                 {"title": "another one again"},
             ],
-            "comments": [*post.comments, *COMMENT_LIST[index:]],
+            "comments": [*post_dict.get("comments", []), *COMMENT_LIST[index:]],
         }
 
-        response = client.put(f"/posts/{id_}", json=update)
+        response = client.put(f"/posts/{id_}", json=update, headers=_HEADERS)
 
         got = response.json()
         expected = {
@@ -219,6 +229,8 @@ async def test_update_redis_post(
                     "id": final["id"],
                     "author": final["author"],
                     "pk": final["pk"],
+                    "created_at": timestamp,
+                    "updated_at": timestamp,
                 }
                 for raw, final in zip(update["comments"], got["comments"])
             ],
@@ -265,22 +277,25 @@ async def test_update_mongo_post(
     mongo_store: MongoStore,
     mongo_posts: list[MongoPost],
     index: int,
+    freezer,
 ):
     """PUT to /posts/{id} updates the mongo post of given id and returns updated version"""
+    timestamp = datetime.now().isoformat()
     with client_with_mongo as client:
         post = mongo_posts[index]
+        post_dict = post.model_dump(mode="json", exclude_none=True, exclude_unset=True)
         id_ = post.id
         update = {
-            "name": "some other name",
-            "todos": [
-                *post.tags,
+            "title": "some other title",
+            "tags": [
+                *post_dict.get("tags", []),
                 {"title": "another one"},
                 {"title": "another one again"},
             ],
-            "comments": [*post.comments, *COMMENT_LIST[index:]],
+            "comments": [*post_dict.get("comments", []), *COMMENT_LIST[index:]],
         }
 
-        response = client.put(f"/posts/{id_}", json=update)
+        response = client.put(f"/posts/{id_}", json=update, headers=_HEADERS)
 
         got = response.json()
         expected = {
@@ -290,6 +305,8 @@ async def test_update_mongo_post(
                 {
                     **raw,
                     "author": final["author"],
+                    "created_at": timestamp,
+                    "updated_at": timestamp,
                 }
                 for raw, final in zip(update["comments"], got["comments"])
             ],
@@ -538,14 +555,14 @@ async def test_search_sql_by_tag(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("q", _TAG_SEARCH_TERMS)
+@pytest.mark.parametrize("q", ["random", "another one", "another one again"])
 async def test_search_redis_by_tag(
     client_with_redis: TestClient,
     redis_store: RedisStore,
     redis_posts: list[RedisPost],
     q: str,
 ):
-    """GET /posts?tag={} gets all redis posts with tag containing search item"""
+    """GET /posts?tag={} gets all redis posts with tag containing search item. Partial searches nit supported."""
     with client_with_redis as client:
         response = client.get(f"/posts?tag={q}")
 

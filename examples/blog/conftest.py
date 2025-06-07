@@ -7,7 +7,7 @@ import pytest
 import pytest_asyncio
 import pytest_mock
 from fastapi.testclient import TestClient
-from models import (  # SqlAuthor,
+from models import (
     MongoAuthor,
     MongoComment,
     MongoInternalAuthor,

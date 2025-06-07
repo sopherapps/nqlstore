@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 from models import MongoPost, RedisPost, SqlInternalAuthor, SqlPost
 from pydantic import BaseModel
-from schemas import InternalAuthor, Post, TokenResponse
+from schemas import InternalAuthor, PartialPost, Post, TokenResponse
 from stores import MongoStoreDep, RedisStoreDep, SqlStoreDep, clear_stores
 
 _ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -112,8 +112,13 @@ async def search(
 
         if redis:
             # redis's regex search is not mature so we use its full text search
+            # Unfortunately, redis search does not permit us to search fields that are arrays.
             redis_query = [
-                (_get_redis_field(RedisPost, k) % f"*{v}*")
+                (
+                    (_get_redis_field(RedisPost, k) == f"{v}")
+                    if k == "tags.title"
+                    else (_get_redis_field(RedisPost, k) % f"*{v}*")
+                )
                 for k, v in query_dict.items()
             ]
             results += await redis.find(RedisPost, *redis_query)
@@ -194,7 +199,7 @@ async def update_one(
     mongo: MongoStoreDep,
     current_user: CurrentUserDep,
     id_: int | str,
-    payload: Post,
+    payload: PartialPost,
 ):
     """Update a post"""
     results = []
