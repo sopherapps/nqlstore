@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-06-07
+
 ### Changed
 
 - Allowed `EmbeddedJsonModel`'s to also contain `EmbeddedJsonModel` if there is need.
@@ -14,6 +16,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Made the defining of fields by calling `Field()` or `Relationship()` mandatory.
   This is because SQLModel's require this, and fail if this is not the case.
 - Add support for "Many-to-One" relationships in SQL `insert()` implementation
+- Enabled nested updates in SQL
+
+### Fixed
+
+- Fixed many-to-many relationships updates
 
 ### Added
 
